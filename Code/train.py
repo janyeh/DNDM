@@ -71,13 +71,19 @@ loss_network.eval()
 optimizer_G= torch.optim.Adam(itertools.chain(netG_content.parameters() ,net_dehaze.parameters(),netG_haze.parameters(),net_G.parameters()),  lr=opt.lr, betas=(0.5, 0.999))
 
 lr_scheduler_G = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_G, T_max=100)
-dataloader1 = DataLoader(TrainDatasetFromFolder2('/home/omnisky/4t/RESIDE/ITS-V2/trainA_new',
-                                     '/home/omnisky/4t/RESIDE/ITS-V2/trainB_new',  '/home/omnisky/4t/realWorldHazeDataSet/trainB_newsize_128',crop_size= 128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
-dataloader2 = DataLoader(TrainDatasetFromFolder4('/home/omnisky/4t/RESIDE/OTS_BETA/clear/clear_newsize',
-                                             '/home/omnisky/4t/RESIDE/OTS_BETA/haze/hazy7',  '/home/omnisky/4t/realWorldHazeDataSet/trainA_newsize_128', crop_size=128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
+# dataloader1 = DataLoader(TrainDatasetFromFolder2('/home/omnisky/4t/RESIDE/ITS-V2/trainA_new',
+#                                      '/home/omnisky/4t/RESIDE/ITS-V2/trainB_new',  '/home/omnisky/4t/realWorldHazeDataSet/trainB_newsize_128',crop_size= 128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
+# dataloader2 = DataLoader(TrainDatasetFromFolder4('/home/omnisky/4t/RESIDE/OTS_BETA/clear/clear_newsize',
+#                                              '/home/omnisky/4t/RESIDE/OTS_BETA/haze/hazy7',  '/home/omnisky/4t/realWorldHazeDataSet/trainA_newsize_128', crop_size=128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
+dataloader1 = DataLoader(TrainDatasetFromFolder2('/content/DNDM/Code/trainset/trainA_new',
+                                     '/content/DNDM/Code/trainset/trainB_new',  '/content/DNDM/Code/trainset/trainB_newsize_128',crop_size= 128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
+dataloader2 = DataLoader(TrainDatasetFromFolder4('/content/DNDM/Code/trainset/clear_newsize',
+                                             '/content/DNDM/Code/trainset/hazy7',  '/content/DNDM/Code/trainset/trainA_newsize_128', crop_size=128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
 
 
-val_data_loader = DataLoader(TestDatasetFromFolder1('/home/omnisky/4t/JTY/testdataset'),
+#val_data_loader = DataLoader(TestDatasetFromFolder1('/home/omnisky/4t/JTY/testdataset'),
+#                       batch_size=opt.batchSize, shuffle=False, num_workers=opt.n_cpu)
+val_data_loader = DataLoader(TestDatasetFromFolder1('/content/DNDM/Code/testdataset'),
                        batch_size=opt.batchSize, shuffle=False, num_workers=opt.n_cpu)
 
 logger1 = Logger(opt.n_epochs, len(dataloader1))
