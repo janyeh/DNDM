@@ -40,9 +40,12 @@ net_dehaze.cuda()
 net_G.cuda()
 
 # Load state dicts
-netG_content.load_state_dict(torch.load('./output/netG_content_5.pth'))#unsupervised
-netG_haze.load_state_dict(torch.load('./output/netG_haze_5.pth'))
-net_dehaze.load_state_dict(torch.load('./output/net_dehaze_5.pth'))
+# netG_content.load_state_dict(torch.load('./output/netG_content_5.pth'))#unsupervised
+# netG_haze.load_state_dict(torch.load('./output/netG_haze_5.pth'))
+# net_dehaze.load_state_dict(torch.load('./output/net_dehaze_5.pth'))
+netG_content.load_state_dict(torch.load('./output/netG_content_6.pth'))#unsupervised
+netG_haze.load_state_dict(torch.load('./output/netG_haze_6.pth'))
+net_dehaze.load_state_dict(torch.load('./output/net_dehaze_6.pth'))
 print("net_dehaze have {} parameters in total".format(sum(x.numel() for x in net_dehaze.parameters())))
 print("netG_haze have {} parameters in total".format(sum(x.numel() for x in netG_haze.parameters())))
 print("netG_content have {} parameters in total".format(sum(x.numel() for x in netG_content.parameters())))
