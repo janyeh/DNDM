@@ -77,8 +77,9 @@ lr_scheduler_G = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_G, T_max=1
 #                                              '/home/omnisky/4t/RESIDE/OTS_BETA/haze/hazy7',  '/home/omnisky/4t/realWorldHazeDataSet/trainA_newsize_128', crop_size=128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
 dataloader1 = DataLoader(TrainDatasetFromFolder2('/content/DNDM/Code/trainset/trainA_new',
                                      '/content/DNDM/Code/trainset/trainB_new',  '/content/DNDM/Code/trainset/trainB_newsize_128',crop_size= 128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
-dataloader2 = DataLoader(TrainDatasetFromFolder4('/content/DNDM/Code/trainset/clear_newsize',
-                                             '/content/DNDM/Code/trainset/hazy7',  '/content/DNDM/Code/trainset/trainA_newsize_128', crop_size=128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
+#JanYeh: use just 1 data loader
+#dataloader2 = DataLoader(TrainDatasetFromFolder4('/content/DNDM/Code/trainset/clear_newsize',
+#                                             '/content/DNDM/Code/trainset/hazy7',  '/content/DNDM/Code/trainset/trainA_newsize_128', crop_size=128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
 
 
 #val_data_loader = DataLoader(TestDatasetFromFolder1('/home/omnisky/4t/JTY/testdataset'),
@@ -87,7 +88,8 @@ val_data_loader = DataLoader(TestDatasetFromFolder1('/content/DNDM/Code/testdata
                        batch_size=opt.batchSize, shuffle=False, num_workers=opt.n_cpu)
 
 logger1 = Logger(opt.n_epochs, len(dataloader1))
-logger2 = Logger(opt.n_epochs, len(dataloader2))
+#JanYeh: use just 1 logger
+#logger2 = Logger(opt.n_epochs, len(dataloader2))
 ###################################
 if not os.path.exists('output'):
     os.makedirs('output')
@@ -102,6 +104,9 @@ for epoch in range(opt.epoch, opt.n_epochs):
         dataloader = dataloader1
     else :
         dataloader = dataloader2
+    #JanYeh: use just 1 data loader
+    dataloader = dataloader1
+
 
     ite = 0
     adjust_learning_rate(optimizer_G, epoch)
@@ -201,6 +206,9 @@ for epoch in range(opt.epoch, opt.n_epochs):
             logger = logger1
         else :
             logger = logger2
+        #JanYeh: use just 1 logger
+        logger = logger1
+        
         logger.log({'loss_G': loss_G,  'loss_recover': loss_recover,  'loss_content': loss_content, 'loss_mask': loss_mask, 'loss_haze': loss_haze, 'loss_dehaze': loss_dehaze,'tv_loss': tv_loss,'loss_DC_A': loss_DC_A, 'loss_CAP': loss_CAP, 'loss_Lab': loss_Lab})
         if ite % 1000 == 0:
 
