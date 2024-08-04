@@ -13,8 +13,7 @@ from utils21 import *
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batchSize', type=int, default=1, help='size of the batches')
-#parser.add_argument('--dataroot', type=str, default='/home/omnisky/4t/JTY/testdataset', help='root directory of the dataset')
-parser.add_argument('--dataroot', type=str, default='/content/DNDM/Code/testdataset', help='root directory of the dataset')
+parser.add_argument('--dataroot', type=str, default='/home/omnisky/4t/JTY/testdataset', help='root directory of the dataset')
 parser.add_argument('--input_nc', type=int, default=3, help='number of channels of input data')
 parser.add_argument('--output_nc', type=int, default=3, help='number of channels of output data')
 #parser.add_argument('--size', type=int, default=256, help='size of the data (squared assumed)')
@@ -40,12 +39,9 @@ net_dehaze.cuda()
 net_G.cuda()
 
 # Load state dicts
-# netG_content.load_state_dict(torch.load('./output/netG_content_5.pth'))#unsupervised
-# netG_haze.load_state_dict(torch.load('./output/netG_haze_5.pth'))
-# net_dehaze.load_state_dict(torch.load('./output/net_dehaze_5.pth'))
-netG_content.load_state_dict(torch.load('./output/netG_content_6.pth'))#unsupervised
-netG_haze.load_state_dict(torch.load('./output/netG_haze_6.pth'))
-net_dehaze.load_state_dict(torch.load('./output/net_dehaze_6.pth'))
+netG_content.load_state_dict(torch.load('./output/netG_content_5.pth'))#unsupervised
+netG_haze.load_state_dict(torch.load('./output/netG_haze_5.pth'))
+net_dehaze.load_state_dict(torch.load('./output/net_dehaze_5.pth'))
 print("net_dehaze have {} parameters in total".format(sum(x.numel() for x in net_dehaze.parameters())))
 print("netG_haze have {} parameters in total".format(sum(x.numel() for x in netG_haze.parameters())))
 print("netG_content have {} parameters in total".format(sum(x.numel() for x in netG_content.parameters())))
@@ -56,8 +52,7 @@ net_dehaze.eval()
 # Inputs & targets memory allocation
 Tensor = torch.cuda.FloatTensor if opt.cuda else torch.Tensor
 
-#dataloader = DataLoader(TestDatasetFromFolder2('/home/omnisky/4t/JTY/testdataset/test_new'))#real test-rrrrrr  mytest_A  test-rrrrrr  /home/omnisky/4t/JTY/testdataset/test_new
-dataloader = DataLoader(TestDatasetFromFolder2('/content/DNDM/Code/testdataset/test_new'))
+dataloader = DataLoader(TestDatasetFromFolder2('/home/omnisky/4t/JTY/testdataset/test_new'))#real test-rrrrrr  mytest_A  test-rrrrrr  /home/omnisky/4t/JTY/testdataset/test_new
 
 ###################################
 

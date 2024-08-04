@@ -271,9 +271,6 @@ class TrainDatasetFromFolder1(Dataset):
 
 
 class TrainDatasetFromFolder2(Dataset):
-    """
-    Process the HAZY dataset (13990 images)
-    """
     def __init__(self, dataset_dir_c,dataset_dir_h,  dataset_real,crop_size):
         super(TrainDatasetFromFolder2, self).__init__()
         self.image_filenames_A = [join(dataset_dir_c, x) for x in natsort.natsorted(listdir(dataset_dir_c))[0:1399] for p in range(10) if is_image_file(x)]
@@ -304,9 +301,6 @@ class TrainDatasetFromFolder2(Dataset):
         return  len(self.image_filenames_A) #max(len(self.image_filenames_h), len(self.image_filenames_s))
 
 class TrainDatasetFromFolder4(Dataset):
-    """
-    Process the CLEAR dataset (14427 images)
-    """
     def __init__(self, dataset_dir_c,dataset_dir_h,  dataset_real,crop_size):
         super(TrainDatasetFromFolder4, self).__init__()
         # self.image_filenames_A = [join(dataset_dir_c, x) for x in natsort.natsorted(listdir(dataset_dir_c))[0:1399] for p in range(10) if is_image_file(x)]
