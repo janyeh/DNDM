@@ -40,6 +40,19 @@ print(opt)
 if torch.cuda.is_available() and not opt.cuda:
     print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
+torch.autograd.set_detect_anomaly(True) # enable to detect an error
+
+def compute_loss_safely(loss_fn, *args, **kwargs):
+    try:
+        loss = loss_fn(*args, **kwargs)
+        if not torch.isfinite(loss).all():
+            print(f"Non-finite loss in {loss_fn.__name__}")
+            return torch.tensor(0.0, requires_grad=True).cuda()
+        return loss
+    except Exception as e:
+        print(f"Error in {loss_fn.__name__}: {str(e)}")
+        return torch.tensor(0.0, requires_grad=True).cuda()
+
 ###### Definition of variables ######
 # Networks
 netG_content=Net_content()
@@ -157,23 +170,36 @@ for epoch in range(opt.epoch, opt.n_epochs):
         dehaze_fake_hazy_A = net_dehaze(fake_hazy_A, meta_fake_hazy_A )
 
       
-        loss_haze =  F.smooth_l1_loss(fake_hazy_A , real_B)  + loss_network(fake_hazy_A , real_B) * 0.04
+        # loss_haze =  F.smooth_l1_loss(fake_hazy_A , real_B)  + loss_network(fake_hazy_A , real_B) * 0.04
+        loss_haze = compute_loss_safely(F.smooth_l1_loss, fake_hazy_A , real_B)  + compute_loss_safely(loss_network, fake_hazy_A , real_B) * 0.04
 
-        loss_dehaze = F.smooth_l1_loss(dehaze_B, real_A)  + loss_network(dehaze_B, real_A) * 0.04 \
-                      + F.smooth_l1_loss(dehaze_A, real_A)  + loss_network(dehaze_A, real_A) * 0.04 \
-                       + F.smooth_l1_loss( dehaze_fake_hazy_A, real_A) + loss_network( dehaze_fake_hazy_A, real_A) * 0.04\
-                   
+        # loss_dehaze = F.smooth_l1_loss(dehaze_B, real_A)  + loss_network(dehaze_B, real_A) * 0.04 \
+        #               + F.smooth_l1_loss(dehaze_A, real_A)  + loss_network(dehaze_A, real_A) * 0.04 \
+        #                + F.smooth_l1_loss( dehaze_fake_hazy_A, real_A) + loss_network( dehaze_fake_hazy_A, real_A) * 0.04\
+        loss_dehaze = compute_loss_safely(F.smooth_l1_loss, dehaze_B, real_A)  + compute_loss_safely(loss_network, dehaze_B, real_A) * 0.04 \
+                        + compute_loss_safely(F.smooth_l1_loss, dehaze_A, real_A)  + compute_loss_safely(loss_network, dehaze_A, real_A) * 0.04 \
+                        + compute_loss_safely(F.smooth_l1_loss, dehaze_fake_hazy_A, real_A) + compute_loss_safely(loss_network, dehaze_fake_hazy_A, real_A) * 0.04\
 
-        loss_content = F.smooth_l1_loss(content_A, content_B)  + F.smooth_l1_loss(content_dehaze_B, content_B) + F.smooth_l1_loss(content_dehaze_R, content_R)\
-                        +F.smooth_l1_loss(content_fake_hazy_A ,content_A) # +F.smooth_l1_loss(content_A,content_dehaze_fake_B)\
+        # loss_content = F.smooth_l1_loss(content_A, content_B)  + F.smooth_l1_loss(content_dehaze_B, content_B) + F.smooth_l1_loss(content_dehaze_R, content_R)\
+        #                 +F.smooth_l1_loss(content_fake_hazy_A ,content_A) # +F.smooth_l1_loss(content_A,content_dehaze_fake_B)\
+        loss_content = compute_loss_safely(F.smooth_l1_loss, content_A, content_B)  \
+                        + compute_loss_safely(F.smooth_l1_loss, content_dehaze_B, content_B) + compute_loss_safely(F.smooth_l1_loss, content_dehaze_R, content_R)\
+                        + compute_loss_safely(F.smooth_l1_loss, content_fake_hazy_A ,content_A) # +F.smooth_l1_loss(content_A,content_dehaze_fake_B)\
 
-        loss_mask = F.smooth_l1_loss(haze_mask_dehaze_B, haze_mask_A) + F.smooth_l1_loss(haze_mask_fake_hazy_A , haze_mask_B)#+ F.smooth_l1_loss(haze_mask_fake_hazy_A, haze_mask_A)
+        #loss_mask = F.smooth_l1_loss(haze_mask_dehaze_B, haze_mask_A) + F.smooth_l1_loss(haze_mask_fake_hazy_A , haze_mask_B)#+ F.smooth_l1_loss(haze_mask_fake_hazy_A, haze_mask_A)
+        loss_mask = compute_loss_safely(F.smooth_l1_loss, haze_mask_dehaze_B, haze_mask_A) \
+                    + compute_loss_safely(F.smooth_l1_loss, haze_mask_fake_hazy_A, haze_mask_B)#+ F.smooth_l1_loss(haze_mask_fake_hazy_A, haze_mask_A)
 
 
-        loss_recover = F.smooth_l1_loss(recover_B, real_B) + loss_network(recover_B, real_B) * 0.04 + \
-                       F.smooth_l1_loss(recover_A, real_A) + loss_network(recover_A, real_A) * 0.04 + \
-                       F.smooth_l1_loss(recover_R, real_R) + loss_network(recover_R, real_R) * 0.04 + \
-                       F.smooth_l1_loss(recover_dehaze_B, real_A) + loss_network(recover_dehaze_B, real_A) * 0.04
+        # loss_recover = F.smooth_l1_loss(recover_B, real_B) + loss_network(recover_B, real_B) * 0.04 + \
+        #                F.smooth_l1_loss(recover_A, real_A) + loss_network(recover_A, real_A) * 0.04 + \
+        #                F.smooth_l1_loss(recover_R, real_R) + loss_network(recover_R, real_R) * 0.04 + \
+        #                F.smooth_l1_loss(recover_dehaze_B, real_A) + loss_network(recover_dehaze_B, real_A) * 0.04
+
+        loss_recover = compute_loss_safely(F.smooth_l1_loss, recover_B, real_B) + compute_loss_safely(loss_network, recover_B, real_B) * 0.04 + \
+                        compute_loss_safely(F.smooth_l1_loss, recover_A, real_A) + compute_loss_safely(loss_network, recover_A, real_A) * 0.04 + \
+                        compute_loss_safely(F.smooth_l1_loss, recover_R, real_R) + compute_loss_safely(loss_network, recover_R, real_R) * 0.04 + \
+                        compute_loss_safely(F.smooth_l1_loss, recover_dehaze_B, real_A) + compute_loss_safely(loss_network, recover_dehaze_B, real_A) * 0.04
 
         y = dehaze_R
         z = dehaze_B
@@ -190,9 +216,11 @@ for epoch in range(opt.epoch, opt.n_epochs):
         # Total loss
         loss_G = loss_recover +loss_content +loss_haze +loss_mask +10*loss_dehaze + 0.01 * loss_DC_A+ 2*1e-7*tv_loss + 0.001 *loss_CAP +0.0001*loss_Lab
         if not torch.isfinite(loss_G).all():
-            continue
-        torch.autograd.set_detect_anomaly(True)
+            print("Non-finite loss, skipping backward pass")
+            continue        
         loss_G.backward()
+        # add gradient clipping to prevent exploding gradient in G
+        torch.nn.utils.clip_grad_norm_(itertools.chain(netG_content.parameters(), netG_haze.parameters(), net_dehaze.parameters(), net_G.parameters()), 1.0)
         optimizer_G.step()
 
         ###################################
