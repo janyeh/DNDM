@@ -32,7 +32,7 @@ parser.add_argument('--lr', type=float, default=0.0001, help='initial learning r
 #parser.add_argument('--size', type=int, default=256, help='size of the data crop (squared assumed)')
 parser.add_argument('--input_nc', type=int, default=3, help='number of channels of input data')#256
 parser.add_argument('--output_nc', type=int, default=3, help='number of channels of output data')
-parser.add_argument('--cuda', action='store_true', default='Ture',help='use GPU computation')
+parser.add_argument('--cuda', action='store_true', default='True',help='use GPU computation')
 parser.add_argument('--n_cpu', type=int, default=1, help='number of cpu threads to use during batch generation')
 opt = parser.parse_args()
 print(opt)
@@ -189,6 +189,9 @@ for epoch in range(opt.epoch, opt.n_epochs):
 
         # Total loss
         loss_G = loss_recover +loss_content +loss_haze +loss_mask +10*loss_dehaze + 0.01 * loss_DC_A+ 2*1e-7*tv_loss + 0.001 *loss_CAP +0.0001*loss_Lab
+        if not torch.isfinite(loss_G).all():
+            continue
+        torch.autograd.set_detect_anomaly(True)
         loss_G.backward()
         optimizer_G.step()
 
