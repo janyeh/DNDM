@@ -183,12 +183,12 @@ for epoch in range(opt.epoch, opt.n_epochs):
             content_fake_hazy_A, con_fake_hazy_A  = netG_content(fake_hazy_A )
             haze_mask_fake_hazy_A,mask_fake_hazy_A = netG_haze(fake_hazy_A )
 
+            meta_fake_hazy_A = cat([con_fake_hazy_A,mask_fake_hazy_A],1)
             # Jan - debug BEGIN
             if not check_tensor(fake_hazy_A, "fake_hazy_A") or not check_tensor(meta_fake_hazy_A, "meta_fake_hazy_A"):
                 print("Skipping iteration due to NaN or Inf")
                 continue
             # Jan - debug END
-            meta_fake_hazy_A = cat([con_fake_hazy_A,mask_fake_hazy_A],1)
 
             # print(f"fake_hazy_A shape: {fake_hazy_A.shape}")
             # print(f"meta_fake_hazy_A shape: {meta_fake_hazy_A.shape}")
