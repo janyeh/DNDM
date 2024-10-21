@@ -92,8 +92,12 @@ class ffa(nn.Module):
         res1=self.g1(x)
         res2=self.g2(res1)
         res3=self.g3(res2)
-        w=self.ca(meta)
         # JanYeh DEBUG BEGIN
+        # Memory usage after first group of layers
+        print(f"Memory allocated after Group Layers: {torch.cuda.memory_allocated()} bytes")
+        print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
+        
+        w=self.ca(meta)
         # Print the shapes of the tensors for debugging
         print(f"res1 shape: {res1.shape}")
         print(f"res2 shape: {res2.shape}")
@@ -101,10 +105,19 @@ class ffa(nn.Module):
         print(f"w shape before view: {w.shape}")
         w=w.view(-1,self.gps,self.dim)[:,:,:,None,None]
         print(f"w shape after view: {w.shape}")
-        # JanYeh DEBUG END
+        # Memory usage after channel attention
+        print(f"Memory allocated after Channel Attention: {torch.cuda.memory_allocated()} bytes")
+        print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
+
         out=w[:,0,::]*res1+w[:,1,::]*res2+w[:,2,::]*res3
         out=self.palayer(out)
         x=self.post(out)
+
+        # Memory usage after final layer
+        print(f"Memory allocated after PALayer and Post Layer: {torch.cuda.memory_allocated()} bytes")
+        print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
+        # JanYeh DEBUG END
+
         return x #+ x1
 
 

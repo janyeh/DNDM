@@ -22,6 +22,10 @@ from utils21 import *
 import os
 from torch.utils.checkpoint import checkpoint
 
+# JanYeh DEBUG BEGIN
+torch.backends.cudnn.benchmark = True
+# JanYeh DEBUG END
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--epoch', type=int, default=0, help='starting epoch')
 parser.add_argument('--n_epochs', type=int, default=20, help='number of epochs of training')
@@ -272,11 +276,29 @@ for epoch in range(opt.epoch, opt.n_epochs):
             if loss_components:
                 loss_G = sum(loss_components)
                 if check_tensor(loss_G, "loss_G"):
-                    print("Starting backward pass")
-                    loss_G.backward()
-                    print("Backward pass completed")
+                    # Memory usage before backward pass
+                    print(f"Memory allocated after forward pass: {torch.cuda.memory_allocated()} bytes")
+                    print(f"Max memory allocated after forward pass: {torch.cuda.max_memory_allocated()} bytes")
+
+                    with torch.autograd.profiler.profile(use_cuda=True) as prof:
+                        print("Starting backward pass")
+                        loss_G.backward()
+                        print("Backward pass completed")
+
+                    # Memory usage before backward pass
+                    print(f"Memory allocated after forward pass: {torch.cuda.memory_allocated()} bytes")
+                    print(f"Max memory allocated after forward pass: {torch.cuda.max_memory_allocated()} bytes")
+
+                    print(prof.key_averages().table(sort_by="cuda_time_total"))
                     # add gradient clipping to prevent exploding gradient in G
                     torch.nn.utils.clip_grad_norm_(itertools.chain(netG_content.parameters(), netG_haze.parameters(), net_dehaze.parameters(), net_G.parameters()), 1.0)
+
+                    # Check for large gradient values
+                    for name, param in net_dehaze.named_parameters():
+                        if param.grad is not None:
+                            max_grad = param.grad.abs().max()
+                            print(f"Max gradient for {name}: {max_grad}")
+
                     optimizer_G.step()
                     print("Gradient clipping completed")
                 else:
