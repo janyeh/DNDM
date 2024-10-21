@@ -93,7 +93,15 @@ class ffa(nn.Module):
         res2=self.g2(res1)
         res3=self.g3(res2)
         w=self.ca(meta)
+        # JanYeh DEBUG BEGIN
+        # Print the shapes of the tensors for debugging
+        print(f"res1 shape: {res1.shape}")
+        print(f"res2 shape: {res2.shape}")
+        print(f"res3 shape: {res3.shape}")
+        print(f"w shape before view: {w.shape}")
         w=w.view(-1,self.gps,self.dim)[:,:,:,None,None]
+        print(f"w shape after view: {w.shape}")
+        # JanYeh DEBUG END
         out=w[:,0,::]*res1+w[:,1,::]*res2+w[:,2,::]*res3
         out=self.palayer(out)
         x=self.post(out)
