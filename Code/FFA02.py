@@ -87,35 +87,46 @@ class ffa(nn.Module):
         self.pre = nn.Sequential(*pre_process)
         self.post = nn.Sequential(*post_precess)
 
-    def forward(self, x1,meta):
+    def forward(self, x1, meta):
+        # JanYeh: Clamp meta before using it in channel attention
+        meta = torch.clamp(meta, min=-1.0, max=1.0)
+
         x = self.pre(x1)
         res1=self.g1(x)
         res2=self.g2(res1)
         res3=self.g3(res2)
         # JanYeh DEBUG BEGIN
         # Memory usage after first group of layers
-        print(f"Memory allocated after Group Layers: {torch.cuda.memory_allocated()} bytes")
-        print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
+        # print(f"Memory allocated after Group Layers: {torch.cuda.memory_allocated()} bytes")
+        # print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
         
         w=self.ca(meta)
+
+        # JanYeh: clamp the weights to prevent exploding gradient
+        w = torch.clamp(w, min=1e-6, max=1.0)
         # Print the shapes of the tensors for debugging
-        print(f"res1 shape: {res1.shape}")
-        print(f"res2 shape: {res2.shape}")
-        print(f"res3 shape: {res3.shape}")
-        print(f"w shape before view: {w.shape}")
+        # print(f"res1 shape: {res1.shape}")
+        # print(f"res2 shape: {res2.shape}")
+        # print(f"res3 shape: {res3.shape}")
+        # print(f"w shape before view: {w.shape}")
         w=w.view(-1,self.gps,self.dim)[:,:,:,None,None]
         print(f"w shape after view: {w.shape}")
         # Memory usage after channel attention
-        print(f"Memory allocated after Channel Attention: {torch.cuda.memory_allocated()} bytes")
-        print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
+        # print(f"Memory allocated after Channel Attention: {torch.cuda.memory_allocated()} bytes")
+        # print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
+
+        # JanYeh: Check for NaNs or Infs in w and handle them
+        if not torch.isfinite(w).all():
+            print("NaN or Inf detected in w")
+            return torch.zeros_like(w)
 
         out=w[:,0,::]*res1+w[:,1,::]*res2+w[:,2,::]*res3
         out=self.palayer(out)
         x=self.post(out)
 
         # Memory usage after final layer
-        print(f"Memory allocated after PALayer and Post Layer: {torch.cuda.memory_allocated()} bytes")
-        print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
+        # print(f"Memory allocated after PALayer and Post Layer: {torch.cuda.memory_allocated()} bytes")
+        # print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
         # JanYeh DEBUG END
 
         return x #+ x1
