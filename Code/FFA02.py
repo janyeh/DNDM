@@ -88,14 +88,24 @@ class ffa(nn.Module):
         self.post = nn.Sequential(*post_precess)
 
     def forward(self, x1, meta):
+        # JanYeh DEBUG BEGIN
         # JanYeh: Clamp meta before using it in channel attention
         meta = torch.clamp(meta, min=-1.0, max=1.0)
-
+        
         x = self.pre(x1)
+
+        # JanYeh: Check for NaN or Inf after pre-processing
+        if not torch.isfinite(x).all():
+            print("NaN or Inf detected after pre-processing, skipping iteration")
+            return None
+        
         res1=self.g1(x)
         res2=self.g2(res1)
         res3=self.g3(res2)
-        # JanYeh DEBUG BEGIN
+        # JanYeh: Check for NaN or Inf after group layers
+        if not torch.isfinite(res1).all() or not torch.isfinite(res2).all() or not torch.isfinite(res3).all():
+            print("NaN or Inf detected in res1, res2, or res3, skipping iteration")
+            return None        
         # Memory usage after first group of layers
         # print(f"Memory allocated after Group Layers: {torch.cuda.memory_allocated()} bytes")
         # print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
@@ -109,8 +119,11 @@ class ffa(nn.Module):
         # print(f"res2 shape: {res2.shape}")
         # print(f"res3 shape: {res3.shape}")
         # print(f"w shape before view: {w.shape}")
+
+        # Reshape and apply weights to residuals
         w=w.view(-1,self.gps,self.dim)[:,:,:,None,None]
         print(f"w shape after view: {w.shape}")
+        out=w[:,0,::]*res1+w[:,1,::]*res2+w[:,2,::]*res3
         # Memory usage after channel attention
         # print(f"Memory allocated after Channel Attention: {torch.cuda.memory_allocated()} bytes")
         # print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
@@ -123,9 +136,13 @@ class ffa(nn.Module):
             print("NaN or Inf detected in w")
             return torch.zeros_like(w)
 
-        out=w[:,0,::]*res1+w[:,1,::]*res2+w[:,2,::]*res3
         out=self.palayer(out)
         x=self.post(out)
+
+        # Final NaN/Inf check before returning
+        if not torch.isfinite(x).all():
+            print("NaN or Inf detected after post-processing, skipping iteration")
+            return None
 
         # Memory usage after final layer
         # print(f"Memory allocated after PALayer and Post Layer: {torch.cuda.memory_allocated()} bytes")
