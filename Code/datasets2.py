@@ -186,8 +186,19 @@ class TestDatasetFromFolder1(Dataset):
 
     def __getitem__(self, index):
         image_name = self.h_filenames[index].split('/')[-1]
-        h_image =  ToTensor()(Image.open(self.h_filenames[index]))
-        s_image =  ToTensor()(Image.open(self.s_filenames[index]))
+        # JanYeh: check if index is out of bounds. BEGIN
+        if index >= len(self.h_filenames):
+            print(f"Index {index} is out of bounds for h_filenames with length {len(self.h_filenames)}. The last item is {self.h_filenames[-1]}") 
+            h_image = None
+        else:
+            h_image =  ToTensor()(Image.open(self.h_filenames[index]))
+
+        if index >= len(self.s_filenames):
+            print(f"Index {index} is out of bounds for s_filenames with length {len(self.s_filenames)}. The last item is {self.s_filenames[-1]}") 
+            s_image = None
+        else:
+            s_image =  ToTensor()(Image.open(self.s_filenames[index]))
+        # JanYeh: check if index is out of bounds. END
         return {'A': s_image, 'B': h_image}
         # return {'A': h_image, 'B': s_image}
 
