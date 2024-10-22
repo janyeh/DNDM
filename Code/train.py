@@ -187,7 +187,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
             content_fake_hazy_A, con_fake_hazy_A  = netG_content(fake_hazy_A )
             haze_mask_fake_hazy_A,mask_fake_hazy_A = netG_haze(fake_hazy_A )
 
-            meta_fake_hazy_A = cat([con_fake_hazy_A,mask_fake_hazy_A],1)
+            meta_fake_hazy_A = torch.clamp(cat([con_fake_hazy_A,mask_fake_hazy_A],1), min=-1.0, max=1.0)
             # Jan - debug BEGIN
             if not check_tensor(fake_hazy_A, "fake_hazy_A") or not check_tensor(meta_fake_hazy_A, "meta_fake_hazy_A"):
                 print("Skipping iteration due to NaN or Inf")
@@ -294,10 +294,10 @@ for epoch in range(opt.epoch, opt.n_epochs):
                     torch.nn.utils.clip_grad_norm_(itertools.chain(netG_content.parameters(), netG_haze.parameters(), net_dehaze.parameters(), net_G.parameters()), 1.0)
 
                     # Check for large gradient values
-                    for name, param in net_dehaze.named_parameters():
-                        if param.grad is not None:
-                            max_grad = param.grad.abs().max()
-                            print(f"Max gradient for {name}: {max_grad}")
+                    # for name, param in net_dehaze.named_parameters():
+                    #     if param.grad is not None:
+                    #         max_grad = param.grad.abs().max()
+                    #         print(f"Max gradient for {name}: {max_grad}")
 
                     optimizer_G.step()
                     print("Gradient clipping completed")

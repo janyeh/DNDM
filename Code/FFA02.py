@@ -103,7 +103,7 @@ class ffa(nn.Module):
         w=self.ca(meta)
 
         # JanYeh: clamp the weights to prevent exploding gradient
-        w = torch.clamp(w, min=1e-6, max=1.0)
+        w = torch.clamp(w, min=1e-8, max=1.0)
         # Print the shapes of the tensors for debugging
         # print(f"res1 shape: {res1.shape}")
         # print(f"res2 shape: {res2.shape}")
@@ -116,6 +116,9 @@ class ffa(nn.Module):
         # print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
 
         # JanYeh: Check for NaNs or Infs in w and handle them
+        if not torch.isfinite(meta).all():
+            print("NaN or Inf detected in meta")
+            return None
         if not torch.isfinite(w).all():
             print("NaN or Inf detected in w")
             return torch.zeros_like(w)
