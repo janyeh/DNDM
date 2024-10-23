@@ -180,10 +180,23 @@ for epoch in range(opt.epoch, opt.n_epochs):
 
             meta_A = cat([con_A, mask_A],1)
 
+            # JanYeh: Clamp tensors to avoid extreme values
+            content_A = torch.clamp(content_A, min=-1.0, max=1.0)
+            haze_mask_B = torch.clamp(haze_mask_B, min=-1.0, max=1.0)
+ 
+            # JanYeh: Check for NaN or Inf before passing to net_G
+            if not torch.isfinite(content_A).all() or not torch.isfinite(haze_mask_B).all():
+               print("NaN or Inf detected in content_A or haze_mask_B, skipping iteration")
+               continue
+
             dehaze_A = net_dehaze(real_A, meta_A )
             recover_A = net_G(content_A, haze_mask_A)
 
             fake_hazy_A = net_G(content_A,haze_mask_B)
+            # JanYeh: Check for NaN or Inf after computing fake_hazy_A
+            if not torch.isfinite(fake_hazy_A).all():
+                print("NaN or Inf detected in fake_hazy_A, skipping iteration")
+                continue
             check_tensor(fake_hazy_A, "fake_hazy_A")
 
             content_fake_hazy_A, con_fake_hazy_A  = netG_content(fake_hazy_A )
