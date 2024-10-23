@@ -54,7 +54,9 @@ def compute_loss_safely(loss_fn, *args, **kwargs):
             return torch.tensor(0.0, requires_grad=True).cuda()
         return loss
     except Exception as e:
-        print(f"Error in {loss_fn.__name__}: {str(e)}")
+        #print(f"Error in {loss_fn.__name__}: {str(e)}")
+        # JanYeh: Print the type of the loss function
+        print(f"Error in {type(loss_fn).__name__}: {str(e)}")
         return torch.tensor(0.0, requires_grad=True).cuda()
 
 def check_tensor(tensor, name):
