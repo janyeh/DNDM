@@ -189,6 +189,9 @@ for epoch in range(opt.epoch, opt.n_epochs):
 
             meta_fake_hazy_A = torch.clamp(cat([con_fake_hazy_A,mask_fake_hazy_A],1), min=-1.0, max=1.0)
             # Jan - debug BEGIN
+            if not torch.isfinite(fake_hazy_A).all() or not torch.isfinite(meta_fake_hazy_A).all():
+                print("NaN or Inf detected in fake_hazy_A or meta_fake_hazy_A, skipping iteration")
+                continue
             if not check_tensor(fake_hazy_A, "fake_hazy_A") or not check_tensor(meta_fake_hazy_A, "meta_fake_hazy_A"):
                 print("Skipping iteration due to NaN or Inf")
                 continue

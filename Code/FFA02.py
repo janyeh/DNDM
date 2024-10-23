@@ -123,11 +123,6 @@ class ffa(nn.Module):
         # Reshape and apply weights to residuals
         w=w.view(-1,self.gps,self.dim)[:,:,:,None,None]
         print(f"w shape after view: {w.shape}")
-        out=w[:,0,::]*res1+w[:,1,::]*res2+w[:,2,::]*res3
-        # Memory usage after channel attention
-        # print(f"Memory allocated after Channel Attention: {torch.cuda.memory_allocated()} bytes")
-        # print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
-
         # JanYeh: Check for NaNs or Infs in w and handle them
         if not torch.isfinite(meta).all():
             print("NaN or Inf detected in meta")
@@ -135,6 +130,16 @@ class ffa(nn.Module):
         if not torch.isfinite(w).all():
             print("NaN or Inf detected in w")
             return torch.zeros_like(w)
+
+        out=w[:,0,::]*res1+w[:,1,::]*res2+w[:,2,::]*res3
+        # JanYeh: Check for NaNs or Infs in out and handle them
+        if not torch.isfinite(out).all():
+            print("NaN or Inf detected in out")
+            return None
+        # Memory usage after channel attention
+        # print(f"Memory allocated after Channel Attention: {torch.cuda.memory_allocated()} bytes")
+        # print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
+
 
         out=self.palayer(out)
         x=self.post(out)
