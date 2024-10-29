@@ -307,7 +307,8 @@ for epoch in range(opt.epoch, opt.n_epochs):
                     print(f"Memory allocated after forward pass: {torch.cuda.memory_allocated()} bytes")
                     print(f"Max memory allocated after forward pass: {torch.cuda.max_memory_allocated()} bytes")
 
-                    print(prof.key_averages().table(sort_by="cuda_time_total"))
+                    # JanYeh: Print the profiler results
+                    #print(prof.key_averages().table(sort_by="cuda_time_total"))
                     # add gradient clipping to prevent exploding gradient in G
                     torch.nn.utils.clip_grad_norm_(itertools.chain(netG_content.parameters(), netG_haze.parameters(), net_dehaze.parameters(), net_G.parameters()), 1.0)
 
@@ -377,10 +378,23 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 meta_B = cat([con_B,mask_B],1)
                 dehaze_B = net_dehaze(real_B, meta_B)
 
-                vutils.save_image(real_A.data, './results/Targets/%05d.png' % (int(i)), padding=0,
-                                  normalize=True)  # False
-                vutils.save_image(real_B.data, './results/Inputs/%05d.png' % (int(i)), padding=0, normalize=True)
-                vutils.save_image(dehaze_B.data, './results/Outputs/%05d.png' % (int(i)), padding=0, normalize=True)
+                # JanYeh: Check for None before saving images BEGIN
+                if real_A is not None:
+                    vutils.save_image(real_A.data, './results/Targets/%05d.png' % (int(i)), padding=0, normalize=True)  # False
+                else:
+                    print(f"ERROR: real_A is None. Path="+f"{'./results/Targets/%05d.png' % (int(i))}") 
+
+                if real_B is not None:
+                    vutils.save_image(real_B.data, './results/Inputs/%05d.png' % (int(i)), padding=0, normalize=True)
+                else:
+                    print(f"ERROR: real_B is None. Path="+f"{'./results/Inputs/%05d.png' % (int(i))}")
+
+                if dehaze_B is not None:
+                    vutils.save_image(dehaze_B.data, './results/Outputs/%05d.png' % (int(i)), padding=0, normalize=True)
+                else:
+                    print(f"ERROR: dehaze_B is None. Path="+f"{'./results/Outputs/%05d.png' % (int(i))}")
+                # JanYeh: Check for None before saving images END
+
                 # Calculation of SSIM and PSNR values
                 # print(output)
                 output = dehaze_B.data.cpu().numpy()[0]
