@@ -102,10 +102,13 @@ class ffa(nn.Module):
         res1=self.g1(x)
         res2=self.g2(res1)
         res3=self.g3(res2)
-        # JanYeh: Check for NaN or Inf after group layers
+        # JanYeh: Clamp and Check for NaN or Inf after group layers
+
         if not torch.isfinite(res1).all() or not torch.isfinite(res2).all() or not torch.isfinite(res3).all():
             print("NaN or Inf detected in res1, res2, or res3, skipping iteration")
-            return None        
+            res1 = torch.clamp(res1, min=-1e6, max=1e6)
+            res2 = torch.clamp(res2, min=-1e6, max=1e6)
+            res3 = torch.clamp(res3, min=-1e6, max=1e6)
         # Memory usage after first group of layers
         # print(f"Memory allocated after Group Layers: {torch.cuda.memory_allocated()} bytes")
         # print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")

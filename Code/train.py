@@ -379,20 +379,20 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 dehaze_B = net_dehaze(real_B, meta_B)
 
                 # JanYeh: Check for None before saving images BEGIN
-                if real_A is not None:
-                    vutils.save_image(real_A.data, './results/Targets/%05d.png' % (int(i)), padding=0, normalize=True)  # False
-                else:
-                    print(f"ERROR: real_A is None. Path="+f"{'./results/Targets/%05d.png' % (int(i))}") 
+                if real_A is None:
+                    real_A = torch.zeros_like(real_A)
+                    print(f"ERROR: real_A is None, set to zero. Path=" + f"{'./results/Targets/%05d.png' % (int(i))}") 
+                vutils.save_image(real_A.data, './results/Targets/%05d.png' % (int(i)), padding=0, normalize=True)  # False
 
-                if real_B is not None:
-                    vutils.save_image(real_B.data, './results/Inputs/%05d.png' % (int(i)), padding=0, normalize=True)
-                else:
-                    print(f"ERROR: real_B is None. Path="+f"{'./results/Inputs/%05d.png' % (int(i))}")
+                if real_B is None:
+                    real_B = torch.zeros_like(real_B)
+                    print(f"ERROR: real_B is None, set to zero. Path=" + f"{'./results/Inputs/%05d.png' % (int(i))}") 
+                vutils.save_image(real_B.data, './results/Inputs/%05d.png' % (int(i)), padding=0, normalize=True)
 
-                if dehaze_B is not None:
-                    vutils.save_image(dehaze_B.data, './results/Outputs/%05d.png' % (int(i)), padding=0, normalize=True)
-                else:
-                    print(f"ERROR: dehaze_B is None. Path="+f"{'./results/Outputs/%05d.png' % (int(i))}")
+                if dehaze_B is None:
+                    dehaze_B = torch.zeros_like(dehaze_B)
+                    print(f"ERROR: dehaze_B is None, set to zero. Path="+f"{'./results/Outputs/%05d.png' % (int(i))}") 
+                vutils.save_image(dehaze_B.data, './results/Outputs/%05d.png' % (int(i)), padding=0, normalize=True)
                 # JanYeh: Check for None before saving images END
 
                 # Calculation of SSIM and PSNR values
