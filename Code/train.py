@@ -46,6 +46,26 @@ if torch.cuda.is_available() and not opt.cuda:
 
 torch.autograd.set_detect_anomaly(True) # enable to detect an error
 
+def safe_clamp_tuple(tuple_tensor, name=""):
+    """
+    Safely clamp tuple of tensors, handling None values and providing warnings
+    Returns tuple of clamped tensors
+    """
+    if not isinstance(tuple_tensor, tuple):
+        return tuple_tensor
+    result = []
+    for i, tensor in enumerate(tuple_tensor):
+        if tensor is not None:
+            if not torch.isfinite(tensor).all():
+                print(f"Warning: Non-finite values detected in {name}[{i}]. Clamping values.")
+            result.append(torch.clamp(tensor, min=-1e8, max=1e8))
+        else:
+            result.append(None)
+    return tuple(result)
+
+def safe_clamp(tensor, name=""): 
+    return safe_clamp_tuple((tensor,), name)[0]
+
 def compute_loss_safely(loss_fn, *args, **kwargs):
     try:
         loss = loss_fn(*args, **kwargs)
@@ -149,58 +169,54 @@ for epoch in range(opt.epoch, opt.n_epochs):
             
             ite += 1
             optimizer_G.zero_grad()
-            content_B,con_B = netG_content(real_B)
-            haze_mask_B,mask_B = netG_haze(real_B)
+            content_B,con_B = safe_clamp(netG_content(real_B), "netG_content(real_B)")
+            haze_mask_B,mask_B = safe_clamp_tuple(netG_haze(real_B), "netG_haze(real_B)")
 
-            content_R,con_R = netG_content(real_R)
-            haze_mask_R,mask_R = netG_haze(real_R)
+            content_R,con_R = safe_clamp(netG_content(real_R), "netG_content(real_R)")
+            haze_mask_R,mask_R = safe_clamp_tuple(netG_haze(real_R), "netG_haze(real_R)")
 
-            recover_R = net_G(content_R, haze_mask_R)
-            recover_B = net_G(content_B, haze_mask_B)
+            recover_R = safe_clamp(net_G(content_R, haze_mask_R), "net_G(content_R, haze_mask_R)")
+            recover_B = safe_clamp(net_G(content_B, haze_mask_B), "net_G(content_B, haze_mask_B)")
 
             meta_B = cat([con_B,mask_B],1)
             meta_R = cat([con_R, mask_R], 1)
 
-            dehaze_B = net_dehaze(real_B, meta_B)
-            dehaze_R = net_dehaze(real_R, meta_R)
+            dehaze_B = safe_clamp(net_dehaze(real_B, meta_B), "net_dehaze(real_B, meta_B)")
+            dehaze_R = safe_clamp(net_dehaze(real_R, meta_R), "net_dehaze(real_R, meta_R)")
 
-            content_dehaze_R,con_dehaze_R = netG_content(dehaze_R)
-            content_dehaze_B,con_dehaze_B = netG_content(dehaze_B)
+            content_dehaze_R,con_dehaze_R = safe_clamp_tuple(netG_content(dehaze_R), "netG_content(dehaze_R)")
+            content_dehaze_B,con_dehaze_B = safe_clamp_tuple(netG_content(dehaze_B), "netG_content(dehaze_B)")
 
-            haze_mask_dehaze_R,mask_dehaze_B = netG_haze(dehaze_R)
-            haze_mask_dehaze_B,mask_dehaze_R = netG_haze(dehaze_B)
+            haze_mask_dehaze_R,mask_dehaze_B = safe_clamp_tuple(netG_haze(dehaze_R), "netG_haze(dehaze_R)")
+            haze_mask_dehaze_B,mask_dehaze_R = safe_clamp_tuple(netG_haze(dehaze_B), "netG_haze(dehaze_B)")
 
 
-            recover_dehaze_R = net_G(content_dehaze_R, haze_mask_dehaze_R)
-            recover_dehaze_B = net_G(content_dehaze_B, haze_mask_dehaze_B)
+            recover_dehaze_R = safe_clamp(net_G(content_dehaze_R, haze_mask_dehaze_R), "net_G(content_dehaze_R, haze_mask_dehaze_R)")
+            recover_dehaze_B = safe_clamp(net_G(content_dehaze_B, haze_mask_dehaze_B), "net_G(content_dehaze_B, haze_mask_dehaze_B)")
 
         
-            content_A ,con_A= netG_content(real_A)
-            haze_mask_A,mask_A = netG_haze(real_A)
+            content_A ,con_A= safe_clamp_tuple(netG_content(real_A), "netG_content(real_A)")
+            haze_mask_A,mask_A = safe_clamp_tuple(netG_haze(real_A), "netG_haze(real_A)")
 
             meta_A = cat([con_A, mask_A],1)
-
-            # JanYeh: Clamp tensors to avoid extreme values
-            content_A = torch.clamp(content_A, min=-1.0, max=1.0)
-            haze_mask_B = torch.clamp(haze_mask_B, min=-1.0, max=1.0)
  
             # JanYeh: Check for NaN or Inf before passing to net_G
             if not torch.isfinite(content_A).all() or not torch.isfinite(haze_mask_B).all():
                print("NaN or Inf detected in content_A or haze_mask_B, skipping iteration")
                continue
 
-            dehaze_A = net_dehaze(real_A, meta_A )
-            recover_A = net_G(content_A, haze_mask_A)
+            dehaze_A = safe_clamp(net_dehaze(real_A, meta_A ), "net_dehaze(real_A, meta_A )")
+            recover_A = safe_clamp(net_G(content_A, haze_mask_A), "net_G(content_A, haze_mask_A)")
 
-            fake_hazy_A = net_G(content_A,haze_mask_B)
+            fake_hazy_A = safe_clamp(net_G(content_A,haze_mask_B), "net_G(content_A,haze_mask_B)")
             # JanYeh: Check for NaN or Inf after computing fake_hazy_A
             if not torch.isfinite(fake_hazy_A).all():
                 print("NaN or Inf detected in fake_hazy_A, skipping iteration")
                 continue
             check_tensor(fake_hazy_A, "fake_hazy_A")
 
-            content_fake_hazy_A, con_fake_hazy_A  = netG_content(fake_hazy_A )
-            haze_mask_fake_hazy_A,mask_fake_hazy_A = netG_haze(fake_hazy_A )
+            content_fake_hazy_A, con_fake_hazy_A  = safe_clamp_tuple(netG_content(fake_hazy_A ), "netG_content(fake_hazy_A )")
+            haze_mask_fake_hazy_A,mask_fake_hazy_A = safe_clamp_tuple(netG_haze(fake_hazy_A ), "netG_haze(fake_hazy_A )")
 
             meta_fake_hazy_A = torch.clamp(cat([con_fake_hazy_A,mask_fake_hazy_A],1), min=-1.0, max=1.0)
             # Jan - debug BEGIN
@@ -220,7 +236,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
             # print(f"con_fake_hazy_A shape: {con_fake_hazy_A.shape}")
             # print(f"mask_fake_hazy_A shape: {mask_fake_hazy_A.shape}")
             try:
-                dehaze_fake_hazy_A = net_dehaze(fake_hazy_A, meta_fake_hazy_A )
+                dehaze_fake_hazy_A = safe_clamp(net_dehaze(fake_hazy_A, meta_fake_hazy_A ), "net_dehaze(fake_hazy_A, meta_fake_hazy_A )")
             except Exception as e:
                 print(f"Error in net_dehaze: {e}")
                 continue
@@ -278,7 +294,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
             y = dehaze_R
             z = dehaze_B
             tv_loss = (torch.sum(torch.abs(y[:, :, :, :-1] - y[:, :, :, 1:])) +
-                    torch.sum(torch.abs(y[:, :, :-1, :] - y[:, :, 1:, :])))+\
+                    torch.sum(torch.abs(y[:, :, :-1, :] - y[:, :, 1:, :])))+ \
                     (torch.sum(torch.abs(z[:, :, :, :-1] - z[:, :, :, 1:])) +
                     torch.sum(torch.abs(z[:, :, :-1, :] - z[:, :, 1:, :])))
 

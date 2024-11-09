@@ -3,7 +3,27 @@ import torch
 
 def default_conv(in_channels, out_channels, kernel_size, bias=True):
     return nn.Conv2d(in_channels, out_channels, kernel_size,padding=(kernel_size//2), bias=bias)
-    
+
+def safe_clamp_tuple(tuple_tensor, name=""):
+    """
+    Safely clamp tuple of tensors, handling None values and providing warnings
+    Returns tuple of clamped tensors
+    """
+    if not isinstance(tuple_tensor, tuple):
+        return tuple_tensor
+    result = []
+    for i, tensor in enumerate(tuple_tensor):
+        if tensor is not None:
+            if not torch.isfinite(tensor).all():
+                print(f"Warning: Non-finite values detected in {name}[{i}]. Clamping values.")
+            result.append(torch.clamp(tensor, min=-1e8, max=1e8))
+        else:
+            result.append(None)
+    return tuple(result)
+
+def safe_clamp(tensor, name=""): 
+    return safe_clamp_tuple((tensor,), name)[0]
+
 class PALayer(nn.Module):
     def __init__(self, channel):
         super(PALayer, self).__init__()
@@ -92,31 +112,18 @@ class ffa(nn.Module):
         # JanYeh: Clamp meta before using it in channel attention
         meta = torch.clamp(meta, min=-1.0, max=1.0)
         
-        x = self.pre(x1)
+        x = safe_clamp(self.pre(x1), "pre")
 
         # JanYeh: Check for NaN or Inf after pre-processing
-        if not torch.isfinite(x).all():
-            print("NaN or Inf detected after pre-processing, skipping iteration")
-            return None
         
-        res1=self.g1(x)
-        res2=self.g2(res1)
-        res3=self.g3(res2)
+        res1=safe_clamp(self.g1(x), "g1")
+        res2=safe_clamp(self.g2(res1), "g2")
+        res3=safe_clamp(self.g3(res2), "g3")
         # JanYeh: Clamp and Check for NaN or Inf after group layers
-
-        if not torch.isfinite(res1).all() or not torch.isfinite(res2).all() or not torch.isfinite(res3).all():
-            print("NaN or Inf detected in res1, res2, or res3, skipping iteration")
-            res1 = torch.clamp(res1, min=-1e6, max=1e6)
-            res2 = torch.clamp(res2, min=-1e6, max=1e6)
-            res3 = torch.clamp(res3, min=-1e6, max=1e6)
-        # Memory usage after first group of layers
-        # print(f"Memory allocated after Group Layers: {torch.cuda.memory_allocated()} bytes")
-        # print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
         
-        w=self.ca(meta)
+        w=safe_clamp(self.ca(meta), "ca")
 
         # JanYeh: clamp the weights to prevent exploding gradient
-        w = torch.clamp(w, min=1e-8, max=1.0)
         # Print the shapes of the tensors for debugging
         # print(f"res1 shape: {res1.shape}")
         # print(f"res2 shape: {res2.shape}")
@@ -124,33 +131,18 @@ class ffa(nn.Module):
         # print(f"w shape before view: {w.shape}")
 
         # Reshape and apply weights to residuals
-        w=w.view(-1,self.gps,self.dim)[:,:,:,None,None]
-        print(f"w shape after view: {w.shape}")
+        w=safe_clamp(w.view(-1,self.gps,self.dim)[:,:,:,None,None], "view")
         # JanYeh: Check for NaNs or Infs in w and handle them
-        if not torch.isfinite(meta).all():
-            print("NaN or Inf detected in meta")
-            return None
-        if not torch.isfinite(w).all():
-            print("NaN or Inf detected in w")
-            return torch.zeros_like(w)
 
-        out=w[:,0,::]*res1+w[:,1,::]*res2+w[:,2,::]*res3
+        out=safe_clamp(w[:,0,::]*res1+w[:,1,::]*res2+w[:,2,::]*res3, "out")
         # JanYeh: Check for NaNs or Infs in out and handle them
-        if not torch.isfinite(out).all():
-            print("NaN or Inf detected in out")
-            return None
+
         # Memory usage after channel attention
         # print(f"Memory allocated after Channel Attention: {torch.cuda.memory_allocated()} bytes")
         # print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
 
-
-        out=self.palayer(out)
-        x=self.post(out)
-
-        # Final NaN/Inf check before returning
-        if not torch.isfinite(x).all():
-            print("NaN or Inf detected after post-processing, skipping iteration")
-            return None
+        out=safe_clamp(self.palayer(out), "palayer")
+        x=safe_clamp(self.post(out), "post")
 
         # Memory usage after final layer
         # print(f"Memory allocated after PALayer and Post Layer: {torch.cuda.memory_allocated()} bytes")
