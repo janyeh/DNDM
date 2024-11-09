@@ -185,26 +185,45 @@ class TestDatasetFromFolder1(Dataset):
         #self.s_transform = test_transform()
 
     def __getitem__(self, index):
-        image_name = self.h_filenames[index].split('/')[-1]
+        #image_name = self.h_filenames[index].split('/')[-1]
         # JanYeh: check if index is out of bounds. BEGIN
         if index >= len(self.h_filenames):
-            print(f"Index {index} is out of bounds for h_filenames with length {len(self.h_filenames)}. The last item is {self.h_filenames[-1]}") 
-            h_image = None
-        else:
-            h_image =  ToTensor()(Image.open(self.h_filenames[index]))
+        #     print(f"Index {index} is out of bounds for h_filenames with length {len(self.h_filenames)}. The last item is {self.h_filenames[-1]}") 
+        #     h_image = None
+        # else:
+        #     h_image =  ToTensor()(Image.open(self.h_filenames[index]))
+            print(f"warning: index {index} is out of bounds for h_filenames with length {len(self.h_filenames)}. The last item is {self.h_filenames[-1]}")
+            # return last valid item instead of None
+            index = len(self.h_filenames) - 1
 
         if index >= len(self.s_filenames):
-            print(f"Index {index} is out of bounds for s_filenames with length {len(self.s_filenames)}. The last item is {self.s_filenames[-1]}") 
-            s_image = None
-        else:
-            s_image =  ToTensor()(Image.open(self.s_filenames[index]))
+        #     print(f"Index {index} is out of bounds for s_filenames with length {len(self.s_filenames)}. The last item is {self.s_filenames[-1]}") 
+        #     s_image = None
+        # else:
+        #     s_image =  ToTensor()(Image.open(self.s_filenames[index]))
+            print(f"warning: index {index} is out of bounds for s_filenames with length {len(self.s_filenames)}. The last item is {self.s_filenames[-1]}")
+            # return last valid item instead of None
+            index = len(self.s_filenames) - 1
+
+        try:
+            h_image = ToTensor()(Image.open(self.h_filenames[index]))
+            s_image = ToTensor()(Image.open(self.s_filenames[index]))
+        except Exception as e:
+            print(f"Error loading images: {e}, using zero tensors")
+            # Return zero tensors instead of None
+            h_image = torch.zeros(3, 256, 256)  # Adjust size as needed
+            s_image = torch.zeros(3, 256, 256)  # Adjust size as needed
+
+
         # JanYeh: check if index is out of bounds. END
         return {'A': s_image, 'B': h_image}
         # return {'A': h_image, 'B': s_image}
 
     def __len__(self):
-        return len(self.h_filenames)
-
+        # return len(self.h_filenames)
+        # Return minimum length to avoid index out of bounds
+        return min(len(self.h_filenames), len(self.s_filenames))
+    
 class TestDatasetFromFolder2(Dataset):
     def __init__(self, dataset_dir):
         super(TestDatasetFromFolder2, self).__init__()

@@ -387,6 +387,13 @@ for epoch in range(opt.epoch, opt.n_epochs):
             # for image_name,input, target in enumerate(self.val_loader):
             for i, batch in enumerate(val_data_loader):
                 # Set model input
+                if 'A' not in batch or 'B' not in batch:
+                    print(f"Warning: Incomplete batch at index {i}, skipping")
+                    continue
+                if batch['A'] is None or batch['B'] is None:
+                    print(f"Warning: None values in batch at index {i}, skipping")
+                    continue
+
                 real_A = Variable(batch['A']).cuda(0)  # clear
                 real_B = Variable(batch['B']).cuda(0)
 
