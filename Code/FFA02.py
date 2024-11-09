@@ -4,7 +4,7 @@ import torch
 def default_conv(in_channels, out_channels, kernel_size, bias=True):
     return nn.Conv2d(in_channels, out_channels, kernel_size,padding=(kernel_size//2), bias=bias)
 
-def safe_clamp_tuple(tuple_tensor, name=""):
+def safe_clamp_tuple(tuple_tensor, name="", min=-1e8, max=1e8):
     """
     Safely clamp tuple of tensors, handling None values and providing warnings
     Returns tuple of clamped tensors
@@ -16,12 +16,12 @@ def safe_clamp_tuple(tuple_tensor, name=""):
         if tensor is not None:
             if not torch.isfinite(tensor).all():
                 print(f"Warning: Non-finite values detected in {name}[{i}]. Clamping values.")
-            result.append(torch.clamp(tensor, min=-1e8, max=1e8))
+            result.append(torch.clamp(tensor, min=min, max=max))
         else:
             result.append(None)
     return tuple(result)
 
-def safe_clamp(tensor, name=""): 
+def safe_clamp(tensor, name="", min=-1e8, max=1e8): 
     return safe_clamp_tuple((tensor,), name)[0]
 
 class PALayer(nn.Module):

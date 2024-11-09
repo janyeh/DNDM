@@ -46,7 +46,7 @@ if torch.cuda.is_available() and not opt.cuda:
 
 torch.autograd.set_detect_anomaly(True) # enable to detect an error
 
-def safe_clamp_tuple(tuple_tensor, name=""):
+def safe_clamp_tuple(tuple_tensor, name="", min=-1e8, max=1e8):
     """
     Safely clamp tuple of tensors, handling None values and providing warnings
     Returns tuple of clamped tensors
@@ -56,18 +56,15 @@ def safe_clamp_tuple(tuple_tensor, name=""):
     result = []
     for i, tensor in enumerate(tuple_tensor):
         if isinstance(tensor, torch.Tensor):
-            if tensor is not None:
-                if not torch.isfinite(tensor).all():
-                    print(f"Warning: Non-finite values detected in {name}[{i}]. Clamping values.")
-                result.append(torch.clamp(tensor, min=-1e8, max=1e8))
-            else:
-                result.append(None)
+            if not torch.isfinite(tensor).all():
+                print(f"Warning: Non-finite values detected in {name}[{i}]. Clamping values.")
+            result.append(torch.clamp(tensor, min=-1.0, max=1.0))  # Use tighter bounds
         else:
             result.append(tensor)
     return tuple(result)
 
-def safe_clamp(tensor, name=""): 
-    return safe_clamp_tuple((tensor,), name)[0]
+def safe_clamp(tensor, name="", min=-1e8, max=1e8): 
+    return safe_clamp_tuple((tensor,), name, min, max)[0]
 
 def compute_loss_safely(loss_fn, *args, **kwargs):
     try:
@@ -154,6 +151,36 @@ for epoch in range(opt.epoch, opt.n_epochs):
 
     # Jan - debug 
     max_debug_iterations = 10
+
+    # JanYeh: Safe loss calculation
+    def compute_loss_safely(loss_fn, *args, **kwargs):
+        try:
+            loss = loss_fn(*args, **kwargs)
+            if not torch.isfinite(loss).all():
+                print(f"Non-finite loss in {loss_fn.__name__}")
+                return torch.tensor(0.0, requires_grad=True).cuda()
+            return loss
+        except Exception as e:
+            print(f"Error in {type(loss_fn).__name__}: {str(e)}")
+            return torch.tensor(0.0, requires_grad=True).cuda()
+
+    def check_tensor(tensor, name):
+        if tensor is None:
+            return False
+        if torch.isnan(tensor).any() or torch.isinf(tensor).any():
+            print(f"NaN or Inf detected in {name}")
+            return False
+        print(f"{name} shape: {tensor.shape}, min: {tensor.min().item()}, max: {tensor.max().item()}, mean: {tensor.mean().item()}")
+        return True
+
+    # Add memory debug info
+    torch.backends.cudnn.benchmark = True
+    print(f"Initial memory allocated: {torch.cuda.memory_allocated()} bytes")
+    print(f"Initial max memory allocated: {torch.cuda.max_memory_allocated()} bytes")
+    
+    # JanYeh: Safe loss calculation
+    
+    # In training loop
     for i, batch in enumerate(dataloader):
         # Jan - debug for shorter training
         if i >= max_debug_iterations:
@@ -169,7 +196,23 @@ for epoch in range(opt.epoch, opt.n_epochs):
             check_tensor(real_A, "real_A")
             check_tensor(real_B, "real_B")
             check_tensor(real_R, "real_R")
-            
+
+            # JanYeh: Replace direct loss calculations with safe versions
+            loss_haze = F.smooth_l1_loss(fake_hazy_A, real_B)
+            loss_components = []
+            loss_haze = compute_loss_safely(F.smooth_l1_loss, fake_hazy_A, real_B)
+            if check_tensor(loss_haze, "loss_haze"):
+                loss_components.append(loss_haze)
+            # Add gradient clipping
+            torch.nn.utils.clip_grad_norm_(
+                itertools.chain(netG_content.parameters(), 
+                              netG_haze.parameters(), 
+                              net_dehaze.parameters(), 
+                              net_G.parameters()), 
+                1.0
+            )
+            # JanYeh: End of safe loss calculations
+
             ite += 1
             optimizer_G.zero_grad()
             content_B,con_B = safe_clamp(netG_content(real_B), "netG_content(real_B)")
