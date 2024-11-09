@@ -241,11 +241,16 @@ class Net_hazy(nn.Module):
         self.bn1 = nn.BatchNorm2d(16)
         self.bn2 = nn.BatchNorm2d(16)
 
-    def check_nan(self, x, name):
-        if torch.isnan(x).any():
-            print(f"NaN detected in {name}")
-            return torch.zeros_like(x)
-        return x
+    def check_nan(self, tensors, name):
+        """Handle both single tensors and tuples of tensors"""
+        if isinstance(tensors, tuple):
+            return tuple(self.check_nan(t, f"{name}_{i}") for i, t in enumerate(tensors))
+        elif isinstance(tensors, torch.Tensor):
+            if torch.isnan(tensors).any():
+                print(f"NaN detected in {name}")
+                return torch.zeros_like(tensors)
+            return tensors
+        return tensors
 
     def forward(self, x):
         # Add gradient clipping
@@ -257,7 +262,7 @@ class Net_hazy(nn.Module):
 
         x = self.check_nan(x, "input")
         hazy_out = self.check_nan(self.hazy_Moudle(x), "hazy_out")
-        return hazy_out        
+        return hazy_out
 
     def _make_net(self, net):
         # nets = []
