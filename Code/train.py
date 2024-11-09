@@ -179,7 +179,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
     print(f"Initial max memory allocated: {torch.cuda.max_memory_allocated()} bytes")
     
     # JanYeh: Safe loss calculation
-    
+
     # In training loop
     for i, batch in enumerate(dataloader):
         # Jan - debug for shorter training
@@ -196,22 +196,6 @@ for epoch in range(opt.epoch, opt.n_epochs):
             check_tensor(real_A, "real_A")
             check_tensor(real_B, "real_B")
             check_tensor(real_R, "real_R")
-
-            # JanYeh: Replace direct loss calculations with safe versions
-            loss_haze = F.smooth_l1_loss(fake_hazy_A, real_B)
-            loss_components = []
-            loss_haze = compute_loss_safely(F.smooth_l1_loss, fake_hazy_A, real_B)
-            if check_tensor(loss_haze, "loss_haze"):
-                loss_components.append(loss_haze)
-            # Add gradient clipping
-            torch.nn.utils.clip_grad_norm_(
-                itertools.chain(netG_content.parameters(), 
-                              netG_haze.parameters(), 
-                              net_dehaze.parameters(), 
-                              net_G.parameters()), 
-                1.0
-            )
-            # JanYeh: End of safe loss calculations
 
             ite += 1
             optimizer_G.zero_grad()
@@ -289,6 +273,22 @@ for epoch in range(opt.epoch, opt.n_epochs):
             check_tensor(meta_fake_hazy_A, "meta_fake_hazy_A")
         
             loss_components = []
+
+            # JanYeh: Replace direct loss calculations with safe versions
+            loss_haze = F.smooth_l1_loss(fake_hazy_A, real_B)
+            loss_components = []
+            loss_haze = compute_loss_safely(F.smooth_l1_loss, fake_hazy_A, real_B)
+            if check_tensor(loss_haze, "loss_haze"):
+                loss_components.append(loss_haze)
+            # Add gradient clipping
+            torch.nn.utils.clip_grad_norm_(
+                itertools.chain(netG_content.parameters(), 
+                              netG_haze.parameters(), 
+                              net_dehaze.parameters(), 
+                              net_G.parameters()), 
+                1.0
+            )
+            # JanYeh: End of safe loss calculations
 
             # loss_haze =  F.smooth_l1_loss(fake_hazy_A , real_B)  + loss_network(fake_hazy_A , real_B) * 0.04
             loss_haze = compute_loss_safely(F.smooth_l1_loss, fake_hazy_A , real_B)  + compute_loss_safely(loss_network, fake_hazy_A , real_B) * 0.04

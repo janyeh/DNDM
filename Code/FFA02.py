@@ -151,8 +151,6 @@ class ffa(nn.Module):
 
         return x #+ x1
 
-
-
 class ffa1(nn.Module):
     def __init__(self,gps,blocks,conv=default_conv):
         super(ffa1, self).__init__()
