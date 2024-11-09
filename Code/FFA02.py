@@ -106,7 +106,14 @@ class ffa(nn.Module):
 
         self.pre = nn.Sequential(*pre_process)
         self.post = nn.Sequential(*post_precess)
-
+    
+    def check_tensor(self, tensor, name):
+        if torch.isnan(tensor).any() or torch.isinf(tensor).any():
+            print(f"NaN or Inf detected in {name}")
+            return False
+        print(f"{name} shape: {tensor.shape}, min: {tensor.min().item()}, max: {tensor.max().item()}, mean: {tensor.mean().item()}")
+        return True
+    
     def forward(self, x1, meta):
         # JanYeh DEBUG BEGIN
         # JanYeh: Clamp meta before using it in channel attention
@@ -131,25 +138,53 @@ class ffa(nn.Module):
         # print(f"w shape before view: {w.shape}")
 
         # Reshape and apply weights to residuals
-        w=safe_clamp(w.view(-1,self.gps,self.dim)[:,:,:,None,None], "view")
+        try:
+            w=safe_clamp(w.view(-1,self.gps,self.dim)[:,:,:,None,None], "view")
+        except Exception as e:
+            print(f"Error in weight operation: {e}")
+            return x
         # JanYeh: Check for NaNs or Infs in w and handle them
 
-        out=safe_clamp(w[:,0,::]*res1+w[:,1,::]*res2+w[:,2,::]*res3, "out")
         # JanYeh: Check for NaNs or Infs in out and handle them
 
-        # Memory usage after channel attention
-        # print(f"Memory allocated after Channel Attention: {torch.cuda.memory_allocated()} bytes")
-        # print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
+        if not self.check_tensor(w, "weights") or \
+            not self.check_tensor(res1, "res1") or \
+            not self.check_tensor(res2, "res2") or \
+            not self.check_tensor(res3, "res3"):
+            # Return the pre-processed input if any tensor is invalid
+            return x
 
-        out=safe_clamp(self.palayer(out), "palayer")
-        x=safe_clamp(self.post(out), "post")
+
+        #out=safe_clamp(w[:,0,::]*res1+w[:,1,::]*res2+w[:,2,::]*res3, "out")
+        #out=safe_clamp(self.palayer(out), "palayer")
+        #x=safe_clamp(self.post(out), "post")
+        try:
+            out=safe_clamp(w[:,0,::]*res1+w[:,1,::]*res2+w[:,2,::]*res3, "weighted_sum")
+            if not self.check_tensor(out, "weighted_sum"):
+                return x
+
+            out=safe_clamp(self.palayer(out), "palayer")
+            if not self.check_tensor(out, "after_palayer"):
+                return out  # Return the last valid output
+                
+            x=safe_clamp(self.post(out), "post")
+            if not self.check_tensor(x, "final_output"):
+                return out  # Return the last valid output
+                
+            return x
+        except Exception as e:
+            print(f"Error in forward pass: {e}")
+            # Try to return the last valid output, falling back to pre-processed input
+            if 'out' in locals() and out is not None and torch.isfinite(out).all():
+                return out
+            return x
 
         # Memory usage after final layer
         # print(f"Memory allocated after PALayer and Post Layer: {torch.cuda.memory_allocated()} bytes")
         # print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
         # JanYeh DEBUG END
 
-        return x #+ x1
+        
 
 class ffa1(nn.Module):
     def __init__(self,gps,blocks,conv=default_conv):

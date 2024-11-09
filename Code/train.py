@@ -45,6 +45,8 @@ if torch.cuda.is_available() and not opt.cuda:
     print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
 torch.autograd.set_detect_anomaly(True) # enable to detect an error
+# JanYeh: Set smaller learning rate
+opt.lr = 0.00001  # Reduced from 0.0001
 
 def safe_clamp_tuple(tuple_tensor, name="", min=-1e8, max=1e8):
     """
@@ -281,6 +283,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
             if check_tensor(loss_haze, "loss_haze"):
                 loss_components.append(loss_haze)
             # Add gradient clipping
+            max_grad_norm = 1.0
             torch.nn.utils.clip_grad_norm_(
                 itertools.chain(netG_content.parameters(), 
                               netG_haze.parameters(), 
@@ -381,6 +384,15 @@ for epoch in range(opt.epoch, opt.n_epochs):
                     #         print(f"Max gradient for {name}: {max_grad}")
 
                     optimizer_G.step()
+                    # Check gradients after backward pass
+                    for name, param in itertools.chain(
+                        netG_content.named_parameters(),
+                        netG_haze.named_parameters(),
+                        net_dehaze.named_parameters(),
+                        net_G.named_parameters()):
+                        if param.grad is not None and not torch.isfinite(param.grad).all():
+                            print(f"Warning: Non-finite gradients in {name}")
+                            param.grad.clamp_(-1, 1)
                     print("Gradient clipping completed")
                 else:
                     print("Skipping backward pass due to invalid loss_G")
