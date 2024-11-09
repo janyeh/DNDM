@@ -55,12 +55,15 @@ def safe_clamp_tuple(tuple_tensor, name=""):
         return tuple_tensor
     result = []
     for i, tensor in enumerate(tuple_tensor):
-        if tensor is not None:
-            if not torch.isfinite(tensor).all():
-                print(f"Warning: Non-finite values detected in {name}[{i}]. Clamping values.")
-            result.append(torch.clamp(tensor, min=-1e8, max=1e8))
+        if isinstance(tensor, torch.Tensor):
+            if tensor is not None:
+                if not torch.isfinite(tensor).all():
+                    print(f"Warning: Non-finite values detected in {name}[{i}]. Clamping values.")
+                result.append(torch.clamp(tensor, min=-1e8, max=1e8))
+            else:
+                result.append(None)
         else:
-            result.append(None)
+            result.append(tensor)
     return tuple(result)
 
 def safe_clamp(tensor, name=""): 
