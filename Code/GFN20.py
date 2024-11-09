@@ -21,8 +21,12 @@ class _ResBLockDB(nn.Module):
     def forward(self, x):
         out = self.layers(x)
         residual = x
-        out = torch.add(residual, out)
-        return out
+        # JanYeh: Safe clamp
+        # out = torch.add(residual, out)
+        # return out
+        out = torch.add(residual, torch.clamp(out, -10, 10))
+        return torch.clamp(out, -10, 10)        
+
 class _ResBlockSR(nn.Module):
     def __init__(self, inchannel, outchannel, stride=1):
         super(_ResBlockSR, self).__init__()
@@ -31,14 +35,17 @@ class _ResBlockSR(nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(outchannel, outchannel, 3, stride, 1, bias=True)
         )
-        '''
+        
+        # JanYeh: Initialize weights with Kaiming initialization
         for i in self.modules():
             if isinstance(i, nn.Conv2d):
-                j = i.kernel_size[0] * i.kernel_size[1] * i.out_channels
-                i.weight.data.normal_(0, math.sqrt(2 / j))
+                # j = i.kernel_size[0] * i.kernel_size[1] * i.out_channels
+                # i.weight.data.normal_(0, math.sqrt(2 / j))
+                nn.init.kaiming_normal_(i.weight, mode='fan_out', nonlinearity='relu')
                 if i.bias is not None:
-                    i.bias.data.zero_()
-        '''
+                    # i.bias.data.zero_()
+                    i.bias.data.fill_(0.01)
+        # JanYeh: End of initialization
 
     def forward(self, x):
         out = self.layers(x)
@@ -168,7 +175,10 @@ class _SRMoudle1(nn.Module):
         res8 = self.resBlock(con1)
         con2 = self.conv2(res8)
         sr_feature = torch.add(con2, res8)  # +x
-        mask = cat([con1,  res8, con2,sr_feature ], 1)
+        #mask = cat([con1,  res8, con2,sr_feature ], 1)
+        # JanYeh: Add clamp to prevent extreme values
+        mask = torch.clamp(cat([con1, res8, con2, sr_feature], 1), -10, 10)
+
         return sr_feature, mask
 
 
@@ -227,16 +237,33 @@ class Net_hazy(nn.Module):
         super(Net_hazy, self).__init__()
         self.hazy_Moudle  = self._make_net(_SRMoudle1)
 
+        # Add batch normalization layers
+        self.bn1 = nn.BatchNorm2d(16)
+        self.bn2 = nn.BatchNorm2d(16)
+
+    def check_nan(self, x, name):
+        if torch.isnan(x).any():
+            print(f"NaN detected in {name}")
+            return torch.zeros_like(x)
+        return x
+
     def forward(self, x):
+        # Add gradient clipping
+        if self.training:
+            torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
+ 
+        # hazy_out = self.hazy_Moudle(x)
+        # return hazy_out#, recon_out
 
-        hazy_out = self.hazy_Moudle(x)
-
-        return hazy_out#, recon_out
+        x = self.check_nan(x, "input")
+        hazy_out = self.check_nan(self.hazy_Moudle(x), "hazy_out")
+        return hazy_out        
 
     def _make_net(self, net):
-        nets = []
-        nets.append(net())
-        return nn.Sequential(*nets)
+        # nets = []
+        # nets.append(net())
+        # return nn.Sequential(*nets)
+        return nn.Sequential(net())
 
 class Net_mask(nn.Module):
     def __init__(self):

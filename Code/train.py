@@ -23,7 +23,11 @@ import os
 from torch.utils.checkpoint import checkpoint
 
 # JanYeh DEBUG BEGIN
-torch.backends.cudnn.benchmark = True
+#torch.backends.cudnn.benchmark = True
+torch.backends.cuda.max_memory_allocated = 4294967296  # 4GB limit
+# Use deterministic algorithms
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 # JanYeh DEBUG END
 
 parser = argparse.ArgumentParser()
@@ -95,6 +99,15 @@ netG_haze = Net_hazy()
 net_dehaze  = ffa(3,5)
 net_G= Net_G()
 
+# JanYeh: Initialize weights properly
+def init_weights(m):
+    if isinstance(m, nn.Conv2d):
+        nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+        if m.bias is not None:
+            m.bias.data.fill_(0.01)
+
+for net in [netG_content, netG_haze, net_dehaze, net_G]:
+    net.apply(init_weights)
 
 netG_content.cuda()
 netG_haze.cuda()
@@ -116,7 +129,8 @@ loss_network = LossNetwork(vgg_model).cuda()
 loss_network.eval()
 
 
-optimizer_G= torch.optim.Adam(itertools.chain(netG_content.parameters() ,net_dehaze.parameters(),netG_haze.parameters(),net_G.parameters()),  lr=opt.lr, betas=(0.5, 0.999))
+optimizer_G= torch.optim.Adam(itertools.chain(netG_content.parameters() ,net_dehaze.parameters(),netG_haze.parameters(),net_G.parameters()), \
+        lr=opt.lr, betas=(0.5, 0.999), eps=1e-8)
 
 lr_scheduler_G = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_G, T_max=100)
 dataloader1 = DataLoader(TrainDatasetFromFolder2('trainset/trainA_new',
@@ -359,6 +373,16 @@ for epoch in range(opt.epoch, opt.n_epochs):
             if loss_components:
                 loss_G = sum(loss_components)
                 if check_tensor(loss_G, "loss_G"):
+                    # JanYeh: Gradient scaling
+                    scaler = torch.cuda.amp.GradScaler()
+                    with torch.cuda.amp.autocast():
+                        scaled_loss = loss_G / loss_G.item()
+                    
+                    scaler.scale(scaled_loss).backward()
+                    scaler.step(optimizer_G)
+                    scaler.update()
+                    # JanYeh: End of gradient scaling
+
                     # Memory usage before backward pass
                     print(f"Memory allocated after forward pass: {torch.cuda.memory_allocated()} bytes")
                     print(f"Max memory allocated after forward pass: {torch.cuda.max_memory_allocated()} bytes")
