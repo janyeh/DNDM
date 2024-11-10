@@ -373,57 +373,40 @@ for epoch in range(opt.epoch, opt.n_epochs):
             if loss_components:
                 loss_G = sum(loss_components)
                 if check_tensor(loss_G, "loss_G"):
-                    # JanYeh: Gradient scaling
-                    # scaler = torch.cuda.amp.GradScaler()
-                    # with torch.cuda.amp.autocast():
-                    #     scaled_loss = loss_G / loss_G.item()
-                    # Scale the loss if it's too large
+
+                    # Scale down large loss values
                     if loss_G.item() > 100:
-                        loss_G = loss_G / loss_G.item() * 100                    
-
-                    # scaler.scale(scaled_loss).backward()
-                    # scaler.step(optimizer_G)
-                    # scaler.update()
-                    # loss_G.backward()
-                    # optimizer_G.step()                    
-                    # JanYeh: End of gradient scaling
-
-                    # Memory usage before backward pass
-                    print(f"Memory allocated after forward pass: {torch.cuda.memory_allocated()} bytes")
-                    print(f"Max memory allocated after forward pass: {torch.cuda.max_memory_allocated()} bytes")
-
-                    with torch.autograd.profiler.profile(use_cuda=True) as prof:
-                        print("Starting backward pass")
+                        scale_factor = min(100.0 / loss_G.item(), 0.1)  # Cap scaling factor
+                        loss_G = loss_G * scale_factor
+                        print(f"Scaling loss by factor {scale_factor}")
+                    
+                    try:
+                        # Do backward pass and optimization
                         loss_G.backward()
-                        print("Backward pass completed")
-
-                    # Memory usage before backward pass
-                    print(f"Memory allocated after forward pass: {torch.cuda.memory_allocated()} bytes")
-                    print(f"Max memory allocated after forward pass: {torch.cuda.max_memory_allocated()} bytes")
-
-                    # JanYeh: Print the profiler results
-                    #print(prof.key_averages().table(sort_by="cuda_time_total"))
-                    # add gradient clipping to prevent exploding gradient in G
-                    torch.nn.utils.clip_grad_norm_(itertools.chain(netG_content.parameters(), netG_haze.parameters(), net_dehaze.parameters(), net_G.parameters()), 1.0)
-
-                    # Check for large gradient values
-                    # for name, param in net_dehaze.named_parameters():
-                    #     if param.grad is not None:
-                    #         max_grad = param.grad.abs().max()
-                    #         print(f"Max gradient for {name}: {max_grad}")
-
-                    # Check gradients after backward pass
-                    for name, param in itertools.chain(
-                        netG_content.named_parameters(),
-                        netG_haze.named_parameters(),
-                        net_dehaze.named_parameters(),
-                        net_G.named_parameters()):
-                        if param.grad is not None and not torch.isfinite(param.grad).all():
-                            print(f"Warning: Non-finite gradients in {name}")
-                            param.grad.clamp_(-1, 1)
-
-                    optimizer_G.step()
-                    print("Gradient clipping completed")
+                        # Clip gradients before optimizer step
+                        torch.nn.utils.clip_grad_norm_(
+                            itertools.chain(
+                                netG_content.parameters(),
+                                netG_haze.parameters(), 
+                                net_dehaze.parameters(),
+                                net_G.parameters()
+                            ),
+                            max_norm=1.0
+                        )
+                        # Check and clamp any remaining bad gradients
+                        for name, param in itertools.chain(
+                            netG_content.named_parameters(),
+                            netG_haze.named_parameters(),
+                            net_dehaze.named_parameters(),
+                            net_G.named_parameters()):
+                            if param.grad is not None:
+                                param.grad.data.clamp_(-1, 1)
+                        optimizer_G.step()
+                        print("Optimization step completed")
+                    except Exception as e:
+                        print(f"Error in backward pass: {e}")
+                        continue
+                    
                 else:
                     print("Skipping backward pass due to invalid loss_G")
             else:
