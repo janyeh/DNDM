@@ -374,13 +374,18 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 loss_G = sum(loss_components)
                 if check_tensor(loss_G, "loss_G"):
                     # JanYeh: Gradient scaling
-                    scaler = torch.cuda.amp.GradScaler()
-                    with torch.cuda.amp.autocast():
-                        scaled_loss = loss_G / loss_G.item()
-                    
-                    scaler.scale(scaled_loss).backward()
-                    scaler.step(optimizer_G)
-                    scaler.update()
+                    # scaler = torch.cuda.amp.GradScaler()
+                    # with torch.cuda.amp.autocast():
+                    #     scaled_loss = loss_G / loss_G.item()
+                    # Scale the loss if it's too large
+                    if loss_G.item() > 100:
+                        loss_G = loss_G / loss_G.item() * 100                    
+
+                    # scaler.scale(scaled_loss).backward()
+                    # scaler.step(optimizer_G)
+                    # scaler.update()
+                    loss_G.backward()
+                    optimizer_G.step()                    
                     # JanYeh: End of gradient scaling
 
                     # Memory usage before backward pass
