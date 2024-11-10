@@ -32,83 +32,85 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 # JanYeh DEBUG END
 
-# --- Training Stability Parameters ---
+# --- TRAINING STABILITY PARAMETERS ---
+TOTAL_EPOCHS = 20  # 總訓練回合數
+
+# --- STABILITY CONFIG ---
 STABILITY_CONFIG = {
-    'gradient_clip_norm': 1.0,          # Maximum gradient norm for clipping
-    'loss_scale_threshold': 100.0,      # Threshold for scaling down large losses
-    'loss_scale_factor': 0.01,          # Factor to scale down losses exceeding threshold
-    'tensor_value_clip': (-1.0, 1.0),   # Safe range for tensor values
-    'max_grad_value': 1.0,              # Maximum gradient value for clipping
-    'enable_anomaly_detection': True,    # Enable autograd anomaly detection
+    'gradient_clip_norm': 1.0,          # 梯度裁剪的最大範數值
+    'loss_scale_threshold': 100.0,      # 縮小大型損失的閾值
+    'loss_scale_factor': 0.01,          # 超過閾值時的損失縮小係數
+    'tensor_value_clip': (-1.0, 1.0),   # 張量值的安全範圍
+    'max_grad_value': 1.0,              # 梯度值裁剪的最大值
+    'enable_anomaly_detection': True,    # 啟用自動梯度異常檢測
 }
 
-# --- Memory Management ---
+# --- 記憶體管理 ---
 MEMORY_CONFIG = {
-    'max_gpu_memory': 4294967296,       # 4GB GPU memory limit
-    'enable_cuda_benchmark': False,      # Disable for more stable training
-    'deterministic': True,              # Enable deterministic training
-    'enable_cudnn_benchmark': False,     # Disable for consistency
-    'batch_size': 1,                    # Keep small for stability
-    'pin_memory': True,                 # Add pin_memory option
+    'max_gpu_memory': 4294967296,       # GPU記憶體限制(4GB)
+    'enable_cuda_benchmark': False,      # 停用CUDA基準測試以提高穩定性
+    'deterministic': True,              # 啟用確定性訓練
+    'enable_cudnn_benchmark': False,     # 停用cuDNN基準測試以保持一致性
+    'batch_size': 1,                    # 小批次大小以保持穩定性
+    'pin_memory': True,                 # 啟用固定記憶體以加速數據傳輸
 }
 
-# --- Optimization Parameters ---
+# --- OPTIMIZER CONFIG ---
 OPTIMIZER_CONFIG = {
-    'learning_rate': 0.00001,           # Reduced learning rate for stability
-    'adam_betas': (0.5, 0.999),         # Adam optimizer parameters
-    'adam_eps': 1e-8,                   # Adam epsilon for numerical stability
-    'scheduler_t_max': 100,             # Cosine annealing scheduler period
-    'weight_decay': 1e-4,               # L2 regularization
-    'warmup_epochs': 2,                 # Add warmup period
+    'learning_rate': 0.00001,           # 降低學習率以提高穩定性
+    'adam_betas': (0.5, 0.999),         # Adam優化器的beta參數
+    'adam_eps': 1e-8,                   # Adam優化器的epsilon值(數值穩定性)
+    'scheduler_t_max': 100,             # 餘弦退火調度器週期
+    'weight_decay': 1e-4,               # L2正則化係數
+    'warmup_epochs': 2,                 # 熱身訓練期的回合數
 }
 
-# --- Loss Weights ---
+# --- LOSS WEIGHTS ---
 LOSS_WEIGHTS = {
-    'content_loss': 1.0,
-    'perceptual_loss': 0.04,
-    'dehaze_loss': 10.0,
-    'dc_loss': 0.01,
-    'tv_loss': 2e-7,
-    'cap_loss': 0.001,
-    'lab_loss': 0.0001,
-    'recover_loss': 1.0,                # Add missing loss weight
-    'mask_loss': 1.0,                   # Add missing loss weight
-    'haze_loss': 1.0,                   # Add missing loss weight
-    'cycle_loss': 1.0,                  # Add missing loss weight
-    'identity_loss': 1.0,               # Add missing loss weight
+    'content_loss': 1.0,                # 內容損失權重
+    'perceptual_loss': 0.04,            # 感知損失權重
+    'dehaze_loss': 10.0,                # 去霧損失權重
+    'dc_loss': 0.01,                    # 暗通道損失權重
+    'tv_loss': 2e-7,                    # 全變分損失權重
+    'cap_loss': 0.001,                  # CAP損失權重
+    'lab_loss': 0.0001,                 # Lab顏色空間損失權重
+    'recover_loss': 1.0,                # 恢復損失權重
+    'mask_loss': 1.0,                   # 遮罩損失權重
+    'haze_loss': 1.0,                   # 霧化損失權重
+    'cycle_loss': 1.0,                  # 循環一致性損失權重
+    'identity_loss': 1.0,               # 身份損失權重
 }
 
-# --- Model Architecture Parameters ---
+# --- MODEL ARCHITECTURE PARAMETERS ---
 MODEL_CONFIG = {
-    'ffa_groups': 3,
-    'ffa_blocks': 5,
-    'init_type': 'kaiming',             # Weight initialization method
-    'init_gain': 0.02,                  # Initialization scaling factor
+    'ffa_groups': 3,                    # FFA模型的分組數
+    'ffa_blocks': 5,                    # FFA模型的區塊數
+    'init_type': 'kaiming',             # 權重初始化方法
+    'init_gain': 0.02,                  # 初始化縮放因子
 }
 
-# --- Data Processing ---
+# --- DATA PROCESSING PARAMETERS ---
 DATA_CONFIG = {
-    'crop_size': 128,                   # Training crop size
-    'normalize_range': (-1, 1),         # Input normalization range
-    'num_workers': 1,                   # DataLoader workers
-    'pin_memory': True,                 # Enable pinned memory for faster transfer
+    'crop_size': 128,                   # 訓練用圖像裁剪大小
+    'normalize_range': (-1, 1),         # 輸入標準化範圍
+    'num_workers': 1,                   # 數據加載器的工作進程數
+    'pin_memory': True,                 # 啟用固定記憶體以加速傳輸
 }
 
-# Apply configurations
 def apply_training_configs():
-    # Set memory and CUDA configurations
+    # 設置記憶體和CUDA配置
     torch.backends.cuda.max_memory_allocated = MEMORY_CONFIG['max_gpu_memory']
     torch.backends.cudnn.deterministic = MEMORY_CONFIG['deterministic']
     torch.backends.cudnn.benchmark = MEMORY_CONFIG['enable_cudnn_benchmark']
     
-    # Enable autograd anomaly detection
+    # 啟用自動梯度異常檢測
     if STABILITY_CONFIG['enable_anomaly_detection']:
         torch.autograd.set_detect_anomaly(True)
     
-    # Create argument parser with optimized defaults
+    # 創建參數解析器並設置優化後的默認值
     parser = argparse.ArgumentParser()
     parser.add_argument('--epoch', type=int, default=0)
-    parser.add_argument('--n_epochs', type=int, default=20)
+    parser.add_argument('--n_epochs', type=int, default=TOTAL_EPOCHS)
     parser.add_argument('--batchSize', type=int, default=MEMORY_CONFIG['batch_size'])
     parser.add_argument('--lr', type=float, default=OPTIMIZER_CONFIG['learning_rate'])
     parser.add_argument('--input_nc', type=int, default=3)
