@@ -384,8 +384,8 @@ for epoch in range(opt.epoch, opt.n_epochs):
                     # scaler.scale(scaled_loss).backward()
                     # scaler.step(optimizer_G)
                     # scaler.update()
-                    loss_G.backward()
-                    optimizer_G.step()                    
+                    # loss_G.backward()
+                    # optimizer_G.step()                    
                     # JanYeh: End of gradient scaling
 
                     # Memory usage before backward pass
@@ -412,7 +412,6 @@ for epoch in range(opt.epoch, opt.n_epochs):
                     #         max_grad = param.grad.abs().max()
                     #         print(f"Max gradient for {name}: {max_grad}")
 
-                    optimizer_G.step()
                     # Check gradients after backward pass
                     for name, param in itertools.chain(
                         netG_content.named_parameters(),
@@ -422,6 +421,8 @@ for epoch in range(opt.epoch, opt.n_epochs):
                         if param.grad is not None and not torch.isfinite(param.grad).all():
                             print(f"Warning: Non-finite gradients in {name}")
                             param.grad.clamp_(-1, 1)
+
+                    optimizer_G.step()
                     print("Gradient clipping completed")
                 else:
                     print("Skipping backward pass due to invalid loss_G")
