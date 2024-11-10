@@ -21,6 +21,8 @@ from Labloss import LabLoss
 from utils21 import *
 import os
 from torch.utils.checkpoint import checkpoint
+import torch.backends.cudnn
+from typing import Optional, Tuple, Union
 
 # JanYeh DEBUG BEGIN
 #torch.backends.cudnn.benchmark = True
@@ -30,19 +32,106 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 # JanYeh DEBUG END
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--epoch', type=int, default=0, help='starting epoch')
-parser.add_argument('--n_epochs', type=int, default=20, help='number of epochs of training')
-parser.add_argument('--batchSize', type=int, default=1, help='size of the batches')
-#parser.add_argument('--dataroot', type=str, default='/home/omnisky/volume/datacyclegan', help='root directory of the dataset') #'datasets/horse2zebra/'
-parser.add_argument('--lr', type=float, default=0.0001, help='initial learning rate')
-#parser.add_argument('--decay_epoch', type=int, default=100, help='epoch to start linearly decaying the learning rate to 0')
-#parser.add_argument('--size', type=int, default=256, help='size of the data crop (squared assumed)')
-parser.add_argument('--input_nc', type=int, default=3, help='number of channels of input data')#256
-parser.add_argument('--output_nc', type=int, default=3, help='number of channels of output data')
-parser.add_argument('--cuda', action='store_true', default='True',help='use GPU computation')
-parser.add_argument('--n_cpu', type=int, default=1, help='number of cpu threads to use during batch generation')
-opt = parser.parse_args()
+# --- Training Stability Parameters ---
+STABILITY_CONFIG = {
+    'gradient_clip_norm': 1.0,          # Maximum gradient norm for clipping
+    'loss_scale_threshold': 100.0,      # Threshold for scaling down large losses
+    'loss_scale_factor': 0.01,          # Factor to scale down losses exceeding threshold
+    'tensor_value_clip': (-1.0, 1.0),   # Safe range for tensor values
+    'max_grad_value': 1.0,              # Maximum gradient value for clipping
+    'enable_anomaly_detection': True,    # Enable autograd anomaly detection
+}
+
+# --- Memory Management ---
+MEMORY_CONFIG = {
+    'max_gpu_memory': 4294967296,       # 4GB GPU memory limit
+    'enable_cuda_benchmark': False,      # Disable for more stable training
+    'deterministic': True,              # Enable deterministic training
+    'enable_cudnn_benchmark': False,     # Disable for consistency
+    'batch_size': 1,                    # Keep small for stability
+    'pin_memory': True,                 # Add pin_memory option
+}
+
+# --- Optimization Parameters ---
+OPTIMIZER_CONFIG = {
+    'learning_rate': 0.00001,           # Reduced learning rate for stability
+    'adam_betas': (0.5, 0.999),         # Adam optimizer parameters
+    'adam_eps': 1e-8,                   # Adam epsilon for numerical stability
+    'scheduler_t_max': 100,             # Cosine annealing scheduler period
+    'weight_decay': 1e-4,               # L2 regularization
+    'warmup_epochs': 2,                 # Add warmup period
+}
+
+# --- Loss Weights ---
+LOSS_WEIGHTS = {
+    'content_loss': 1.0,
+    'perceptual_loss': 0.04,
+    'dehaze_loss': 10.0,
+    'dc_loss': 0.01,
+    'tv_loss': 2e-7,
+    'cap_loss': 0.001,
+    'lab_loss': 0.0001,
+    'recover_loss': 1.0,                # Add missing loss weight
+    'mask_loss': 1.0,                   # Add missing loss weight
+    'haze_loss': 1.0,                   # Add missing loss weight
+    'cycle_loss': 1.0,                  # Add missing loss weight
+    'identity_loss': 1.0,               # Add missing loss weight
+}
+
+# --- Model Architecture Parameters ---
+MODEL_CONFIG = {
+    'ffa_groups': 3,
+    'ffa_blocks': 5,
+    'init_type': 'kaiming',             # Weight initialization method
+    'init_gain': 0.02,                  # Initialization scaling factor
+}
+
+# --- Data Processing ---
+DATA_CONFIG = {
+    'crop_size': 128,                   # Training crop size
+    'normalize_range': (-1, 1),         # Input normalization range
+    'num_workers': 1,                   # DataLoader workers
+    'pin_memory': True,                 # Enable pinned memory for faster transfer
+}
+
+# Apply configurations
+def apply_training_configs():
+    # Set memory and CUDA configurations
+    torch.backends.cuda.max_memory_allocated = MEMORY_CONFIG['max_gpu_memory']
+    torch.backends.cudnn.deterministic = MEMORY_CONFIG['deterministic']
+    torch.backends.cudnn.benchmark = MEMORY_CONFIG['enable_cudnn_benchmark']
+    
+    # Enable autograd anomaly detection
+    if STABILITY_CONFIG['enable_anomaly_detection']:
+        torch.autograd.set_detect_anomaly(True)
+    
+    # Create argument parser with optimized defaults
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--epoch', type=int, default=0)
+    parser.add_argument('--n_epochs', type=int, default=20)
+    parser.add_argument('--batchSize', type=int, default=MEMORY_CONFIG['batch_size'])
+    parser.add_argument('--lr', type=float, default=OPTIMIZER_CONFIG['learning_rate'])
+    parser.add_argument('--input_nc', type=int, default=3)
+    parser.add_argument('--output_nc', type=int, default=3)
+    parser.add_argument('--cuda', action='store_true', default=True)
+    parser.add_argument('--n_cpu', type=int, default=DATA_CONFIG['num_workers'])
+    
+    return parser.parse_args()
+
+# Utility function for safe tensor operations
+class SafeOps:
+    def safe_tensor_ops(self, tensor, name=""):
+        if tensor is None:
+            return None
+        if torch.isnan(tensor).any() or torch.isinf(tensor).any():
+            print(f"Warning: Non-finite values in {name}, clamping")
+            tensor = torch.clamp(tensor, 
+                               STABILITY_CONFIG['tensor_value_clip'][0],
+                               STABILITY_CONFIG['tensor_value_clip'][1])
+        return tensor
+    # return safe_tensor_ops
+
+opt = apply_training_configs()
 print(opt)
 
 if torch.cuda.is_available() and not opt.cuda:
