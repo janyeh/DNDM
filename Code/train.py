@@ -230,6 +230,16 @@ for epoch in range(opt.epoch, opt.n_epochs):
             dehaze_B = safe_clamp(net_dehaze(real_B, meta_B), "net_dehaze(real_B, meta_B)")
             dehaze_R = safe_clamp(net_dehaze(real_R, meta_R), "net_dehaze(real_R, meta_R)")
 
+            # Check tensor shapes and channels
+            print(f"dehaze_R shape before content: {dehaze_R.shape}")
+            # Ensure dehaze_R has correct number of channels (3) before passing to netG_content
+            if dehaze_R.size(1) != 3:
+                print(f"Warning: Incorrect channel count in dehaze_R: {dehaze_R.size(1)}, reshaping...")
+                dehaze_R = dehaze_R[:,:3,:,:]
+            if dehaze_B.size(1) != 3:
+                print(f"Warning: Incorrect channel count in dehaze_B: {dehaze_B.size(1)}, reshaping...")
+                dehaze_B = dehaze_B[:,:3,:,:]
+
             content_dehaze_R,con_dehaze_R = safe_clamp_tuple(netG_content(dehaze_R), "netG_content(dehaze_R)")
             content_dehaze_B,con_dehaze_B = safe_clamp_tuple(netG_content(dehaze_B), "netG_content(dehaze_B)")
 
@@ -366,6 +376,12 @@ for epoch in range(opt.epoch, opt.n_epochs):
             loss_Lab = LabLoss(dehaze_R, real_R)*0.01+LabLoss(dehaze_B,real_A)+LabLoss(dehaze_fake_hazy_A ,real_A)
             loss_Lab = loss_Lab.float()
 
+            # Scale large losses before combining
+            if loss_recover > 1000:
+                print(f"Scaling down large loss_recover: {loss_recover}")
+                loss_recover = torch.clamp(loss_recover, max=1000)
+            # Similar checks for other large losses
+
             # Total loss
             # Add the remaining loss components
             loss_components.extend([10*loss_dehaze, 0.01 * loss_DC_A, 2*1e-7*tv_loss, 0.001 *loss_CAP, 0.0001*loss_Lab])
@@ -376,8 +392,11 @@ for epoch in range(opt.epoch, opt.n_epochs):
 
                     # Scale down large loss values
                     if loss_G.item() > 100:
-                        scale_factor = min(100.0 / loss_G.item(), 0.1)  # Cap scaling factor
-                        loss_G = loss_G * scale_factor
+                        # scale_factor = min(100.0 / loss_G.item(), 0.1)  # Cap scaling factor
+                        # loss_G = loss_G * scale_factor
+                        scale_factor = min(100.0 / loss_G.item(), 0.01)  # More aggressive scaling
+                        loss_G = loss_G * scale_factor 
+
                         print(f"Scaling loss by factor {scale_factor}")
                     
                     try:

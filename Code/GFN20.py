@@ -138,6 +138,10 @@ class _Content1(nn.Module):
 
     def forward(self, x):
         con1 = self.relu(self.conv1(x))
+        # Ensure input has correct channels
+        if x.size(1) != 3:
+            print(f"Warning: Input to _Content1 has {x.size(1)} channels, expected 3")
+            x = x[:,:3,:,:]  # Take only first 3 channels
         res8 = self.resBlock(con1)
         con2 = self.conv2(res8)
         sr_feature = torch.add(con2, res8)  # +x
