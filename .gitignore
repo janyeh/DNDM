@@ -1,4 +1,6 @@
 .DS_Store
 Code/__pycache__/
 venv/
+testdataset/
+trainset/
 *.pth
