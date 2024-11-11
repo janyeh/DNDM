@@ -131,17 +131,23 @@ class SafeOps:
                                STABILITY_CONFIG['tensor_value_clip'][0],
                                STABILITY_CONFIG['tensor_value_clip'][1])
         return tensor
-    # return safe_tensor_ops
 
-opt = apply_training_configs()
-print(opt)
+def get_loss_name(loss_fn):
+    """Get a readable name for the loss function or class."""
+    if hasattr(loss_fn, '__name__'):
+        return loss_fn.__name__
+    return loss_fn.__class__.__name__
 
-if torch.cuda.is_available() and not opt.cuda:
-    print("WARNING: You have a CUDA device, so you should probably run with --cuda")
-
-torch.autograd.set_detect_anomaly(True) # enable to detect an error
-# JanYeh: Set smaller learning rate
-opt.lr = 0.00001  # Reduced from 0.0001
+def compute_loss_safely(loss_fn, *args, **kwargs):
+    try:
+        loss = loss_fn(*args, **kwargs)
+        if not torch.isfinite(loss).all():
+            print(f"Non-finite loss in {get_loss_name(loss_fn)}")
+            return torch.tensor(0.0, requires_grad=True).cuda()
+        return loss
+    except Exception as e:
+        print(f"Error in {get_loss_name(loss_fn)}: {str(e)}")
+        return torch.tensor(0.0, requires_grad=True).cuda()
 
 def safe_clamp_tuple(tuple_tensor, name="", min=-1e8, max=1e8):
     """
@@ -160,28 +166,24 @@ def safe_clamp_tuple(tuple_tensor, name="", min=-1e8, max=1e8):
             result.append(tensor)
     return tuple(result)
 
-def safe_clamp(tensor, name="", min=-1e8, max=1e8): 
-    return safe_clamp_tuple((tensor,), name, min, max)[0]
-
-def compute_loss_safely(loss_fn, *args, **kwargs):
-    try:
-        loss = loss_fn(*args, **kwargs)
-        if not torch.isfinite(loss).all():
-            print(f"Non-finite loss in {loss_fn.__name__}")
-            return torch.tensor(0.0, requires_grad=True).cuda()
-        return loss
-    except Exception as e:
-        #print(f"Error in {loss_fn.__name__}: {str(e)}")
-        # JanYeh: Print the type of the loss function
-        print(f"Error in {type(loss_fn).__name__}: {str(e)}")
-        return torch.tensor(0.0, requires_grad=True).cuda()
-
 def check_tensor(tensor, name):
+    if tensor is None:
+        return False
     if torch.isnan(tensor).any() or torch.isinf(tensor).any():
         print(f"NaN or Inf detected in {name}")
         return False
     print(f"{name} shape: {tensor.shape}, min: {tensor.min().item()}, max: {tensor.max().item()}, mean: {tensor.mean().item()}")
     return True
+
+opt = apply_training_configs()
+print(opt)
+
+if torch.cuda.is_available() and not opt.cuda:
+    print("WARNING: You have a CUDA device, so you should probably run with --cuda")
+
+torch.autograd.set_detect_anomaly(True) # enable to detect an error
+# JanYeh: Set smaller learning rate
+opt.lr = 0.00001  # Reduced from 0.0001
 
 ###### Definition of variables ######
 # Networks
@@ -243,6 +245,7 @@ if not os.path.exists('./results'):
     os.makedirs('./results/Outputs')
     os.makedirs('./results/Targets')
 ###### Training ######
+safe_ops = SafeOps()
 for epoch in range(opt.epoch, opt.n_epochs):
 
     # if not epoch%2 :
@@ -258,27 +261,6 @@ for epoch in range(opt.epoch, opt.n_epochs):
 
     # Jan - debug 
     max_debug_iterations = 10
-
-    # JanYeh: Safe loss calculation
-    def compute_loss_safely(loss_fn, *args, **kwargs):
-        try:
-            loss = loss_fn(*args, **kwargs)
-            if not torch.isfinite(loss).all():
-                print(f"Non-finite loss in {loss_fn.__name__}")
-                return torch.tensor(0.0, requires_grad=True).cuda()
-            return loss
-        except Exception as e:
-            print(f"Error in {type(loss_fn).__name__}: {str(e)}")
-            return torch.tensor(0.0, requires_grad=True).cuda()
-
-    def check_tensor(tensor, name):
-        if tensor is None:
-            return False
-        if torch.isnan(tensor).any() or torch.isinf(tensor).any():
-            print(f"NaN or Inf detected in {name}")
-            return False
-        print(f"{name} shape: {tensor.shape}, min: {tensor.min().item()}, max: {tensor.max().item()}, mean: {tensor.mean().item()}")
-        return True
 
     # Add memory debug info
     torch.backends.cudnn.benchmark = True
@@ -306,20 +288,20 @@ for epoch in range(opt.epoch, opt.n_epochs):
 
             ite += 1
             optimizer_G.zero_grad()
-            content_B,con_B = safe_clamp(netG_content(real_B), "netG_content(real_B)")
+            content_B,con_B = safe_ops.safe_tensor_ops(netG_content(real_B), "netG_content(real_B)")
             haze_mask_B,mask_B = safe_clamp_tuple(netG_haze(real_B), "netG_haze(real_B)")
 
-            content_R,con_R = safe_clamp(netG_content(real_R), "netG_content(real_R)")
+            content_R,con_R = safe_ops.safe_tensor_ops(netG_content(real_R), "netG_content(real_R)")
             haze_mask_R,mask_R = safe_clamp_tuple(netG_haze(real_R), "netG_haze(real_R)")
 
-            recover_R = safe_clamp(net_G(content_R, haze_mask_R), "net_G(content_R, haze_mask_R)")
-            recover_B = safe_clamp(net_G(content_B, haze_mask_B), "net_G(content_B, haze_mask_B)")
+            recover_R = safe_ops.safe_tensor_ops(net_G(content_R, haze_mask_R), "net_G(content_R, haze_mask_R)")
+            recover_B = safe_ops.safe_tensor_ops(net_G(content_B, haze_mask_B), "net_G(content_B, haze_mask_B)")
 
             meta_B = cat([con_B,mask_B],1)
             meta_R = cat([con_R, mask_R], 1)
 
-            dehaze_B = safe_clamp(net_dehaze(real_B, meta_B), "net_dehaze(real_B, meta_B)")
-            dehaze_R = safe_clamp(net_dehaze(real_R, meta_R), "net_dehaze(real_R, meta_R)")
+            dehaze_B = safe_ops.safe_tensor_ops(net_dehaze(real_B, meta_B), "net_dehaze(real_B, meta_B)")
+            dehaze_R = safe_ops.safe_tensor_ops(net_dehaze(real_R, meta_R), "net_dehaze(real_R, meta_R)")
 
             # Check tensor shapes and channels
             print(f"dehaze_R shape before content: {dehaze_R.shape}")
@@ -338,8 +320,8 @@ for epoch in range(opt.epoch, opt.n_epochs):
             haze_mask_dehaze_B,mask_dehaze_R = safe_clamp_tuple(netG_haze(dehaze_B), "netG_haze(dehaze_B)")
 
 
-            recover_dehaze_R = safe_clamp(net_G(content_dehaze_R, haze_mask_dehaze_R), "net_G(content_dehaze_R, haze_mask_dehaze_R)")
-            recover_dehaze_B = safe_clamp(net_G(content_dehaze_B, haze_mask_dehaze_B), "net_G(content_dehaze_B, haze_mask_dehaze_B)")
+            recover_dehaze_R = safe_ops.safe_tensor_ops(net_G(content_dehaze_R, haze_mask_dehaze_R), "net_G(content_dehaze_R, haze_mask_dehaze_R)")
+            recover_dehaze_B = safe_ops.safe_tensor_ops(net_G(content_dehaze_B, haze_mask_dehaze_B), "net_G(content_dehaze_B, haze_mask_dehaze_B)")
 
         
             content_A ,con_A= safe_clamp_tuple(netG_content(real_A), "netG_content(real_A)")
@@ -352,10 +334,10 @@ for epoch in range(opt.epoch, opt.n_epochs):
                print("NaN or Inf detected in content_A or haze_mask_B, skipping iteration")
                continue
 
-            dehaze_A = safe_clamp(net_dehaze(real_A, meta_A ), "net_dehaze(real_A, meta_A )")
-            recover_A = safe_clamp(net_G(content_A, haze_mask_A), "net_G(content_A, haze_mask_A)")
+            dehaze_A = safe_ops.safe_tensor_ops(net_dehaze(real_A, meta_A ), "net_dehaze(real_A, meta_A )")
+            recover_A = safe_ops.safe_tensor_ops(net_G(content_A, haze_mask_A), "net_G(content_A, haze_mask_A)")
 
-            fake_hazy_A = safe_clamp(net_G(content_A,haze_mask_B), "net_G(content_A,haze_mask_B)")
+            fake_hazy_A = safe_ops.safe_tensor_ops(net_G(content_A,haze_mask_B), "net_G(content_A,haze_mask_B)")
             # JanYeh: Check for NaN or Inf after computing fake_hazy_A
             if not torch.isfinite(fake_hazy_A).all():
                 print("NaN or Inf detected in fake_hazy_A, skipping iteration")
@@ -383,7 +365,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
             # print(f"con_fake_hazy_A shape: {con_fake_hazy_A.shape}")
             # print(f"mask_fake_hazy_A shape: {mask_fake_hazy_A.shape}")
             try:
-                dehaze_fake_hazy_A = safe_clamp(net_dehaze(fake_hazy_A, meta_fake_hazy_A ), "net_dehaze(fake_hazy_A, meta_fake_hazy_A )")
+                dehaze_fake_hazy_A = safe_ops.safe_tensor_ops(net_dehaze(fake_hazy_A, meta_fake_hazy_A ), "net_dehaze(fake_hazy_A, meta_fake_hazy_A )")
             except Exception as e:
                 print(f"Error in net_dehaze: {e}")
                 continue
