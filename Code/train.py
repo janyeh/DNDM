@@ -3,6 +3,7 @@ import csv
 import argparse
 import itertools
 import math
+import traceback
 import numpy as np
 from torch.utils.data import DataLoader
 import torchvision.utils as vutils
@@ -132,6 +133,26 @@ class SafeOps:
                     STABILITY_CONFIG['tensor_value_clip'][1])
         return tensor
 
+    def reshape_for_output(self, tensor):
+        """Ensure tensor is in correct shape for image output"""
+        if tensor is None:
+            return torch.zeros(1, 3, 128, 128).cuda()
+            
+        # Check if tensor has the right number of dimensions
+        if len(tensor.shape) != 4:
+            print(f"Warning: Incorrect tensor dimensions {tensor.shape}, reshaping")
+            return torch.zeros(1, 3, 128, 128).cuda()
+            
+        # Ensure we have 3 channels for RGB
+        if tensor.shape[1] != 3:
+            print(f"Warning: Incorrect channel count {tensor.shape[1]}, using first 3 channels")
+            if tensor.shape[1] > 3:
+                tensor = tensor[:, :3, :, :]
+            else:
+                return torch.zeros(1, 3, 128, 128).cuda()
+        
+        return tensor
+    
 def get_loss_name(loss_fn):
     """Get a readable name for the loss function or class."""
     if hasattr(loss_fn, '__name__'):
@@ -176,6 +197,7 @@ def check_tensor(tensor, name):
         return False
     print(f"{name} shape: {tensor.shape}, min: {tensor.min().item()}, max: {tensor.max().item()}, mean: {tensor.mean().item()}")
     return True
+
 
 opt = apply_training_configs()
 print(opt)
@@ -588,17 +610,42 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 if real_A is None:
                     real_A = torch.zeros_like(real_A)
                     print(f"ERROR: real_A is None, set to zero. Path=" + f"{'./results/Targets/%05d.png' % (int(i))}") 
-                vutils.save_image(real_A.data, './results/Targets/%05d.png' % (int(i)), padding=0, normalize=True)  # False
-
+                else:
+                    real_A = safe_ops.reshape_for_output(real_A)
+                    
                 if real_B is None:
                     real_B = torch.zeros_like(real_B)
                     print(f"ERROR: real_B is None, set to zero. Path=" + f"{'./results/Inputs/%05d.png' % (int(i))}") 
-                vutils.save_image(real_B.data, './results/Inputs/%05d.png' % (int(i)), padding=0, normalize=True)
+                else:
+                    real_B = safe_ops.reshape_for_output(real_B)
 
                 if dehaze_B is None:
                     dehaze_B = torch.zeros_like(dehaze_B)
                     print(f"ERROR: dehaze_B is None, set to zero. Path="+f"{'./results/Outputs/%05d.png' % (int(i))}") 
-                vutils.save_image(dehaze_B.data, './results/Outputs/%05d.png' % (int(i)), padding=0, normalize=True)
+                else:
+                    dehaze_B = safe_ops.reshape_for_output(dehaze_B)
+                
+                try:
+                    # Clamp values to valid range
+                    real_A = torch.clamp(real_A, -1.0, 1.0)
+                    real_B = torch.clamp(real_B, -1.0, 1.0)
+                    dehaze_B = torch.clamp(dehaze_B, -1.0, 1.0)
+                    
+                    # Convert to uint8 range for saving
+                    real_A = ((real_A + 1) * 127.5).clamp(0, 255).to(torch.uint8)
+                    real_B = ((real_B + 1) * 127.5).clamp(0, 255).to(torch.uint8)
+                    dehaze_B = ((dehaze_B + 1) * 127.5).clamp(0, 255).to(torch.uint8)
+                    
+                    vutils.save_image(real_A.float()/255.0, './results/Targets/%05d.png' % (int(i)), padding=0)
+                    vutils.save_image(real_B.float()/255.0, './results/Inputs/%05d.png' % (int(i)), padding=0)
+                    vutils.save_image(dehaze_B.float()/255.0, './results/Outputs/%05d.png' % (int(i)), padding=0)
+                except Exception as e:
+                    print(f"Error in saving images: str{e}\n{traceback.format_exc()}, shapes: A={real_A.shape}, B={real_B.shape}, dehaze={dehaze_B.shape}")
+
+                # vutils.save_image(real_A.data, './results/Targets/%05d.png' % (int(i)), padding=0, normalize=True)  # False
+                # vutils.save_image(real_B.data, './results/Inputs/%05d.png' % (int(i)), padding=0, normalize=True)
+                # vutils.save_image(dehaze_B.data, './results/Outputs/%05d.png' % (int(i)), padding=0, normalize=True)
+
                 # JanYeh: Check for None before saving images END
 
                 # Calculation of SSIM and PSNR values
