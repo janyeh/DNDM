@@ -299,10 +299,10 @@ for epoch in range(opt.epoch, opt.n_epochs):
 
             ite += 1
             optimizer_G.zero_grad()
-            content_B,con_B = safe_ops.safe_tensor_ops(netG_content(real_B), "netG_content(real_B)")
+            content_B,con_B = safe_clamp_tuple(netG_content(real_B), "netG_content(real_B)")
             haze_mask_B,mask_B = safe_clamp_tuple(netG_haze(real_B), "netG_haze(real_B)")
 
-            content_R,con_R = safe_ops.safe_tensor_ops(netG_content(real_R), "netG_content(real_R)")
+            content_R,con_R = safe_clamp_tuple(netG_content(real_R), "netG_content(real_R)")
             haze_mask_R,mask_R = safe_clamp_tuple(netG_haze(real_R), "netG_haze(real_R)")
 
             recover_R = safe_ops.safe_tensor_ops(net_G(content_R, haze_mask_R), "net_G(content_R, haze_mask_R)")
