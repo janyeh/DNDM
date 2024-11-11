@@ -127,9 +127,9 @@ class SafeOps:
             return None
         if torch.isnan(tensor).any() or torch.isinf(tensor).any():
             print(f"Warning: Non-finite values in {name}, clamping")
-            tensor = torch.clamp(tensor, 
-                               STABILITY_CONFIG['tensor_value_clip'][0],
-                               STABILITY_CONFIG['tensor_value_clip'][1])
+            tensor = torch.clamp(tensor, \
+                    STABILITY_CONFIG['tensor_value_clip'][0], \
+                    STABILITY_CONFIG['tensor_value_clip'][1])
         return tensor
 
 def get_loss_name(loss_fn):
@@ -161,7 +161,9 @@ def safe_clamp_tuple(tuple_tensor, name="", min=-1e8, max=1e8):
         if isinstance(tensor, torch.Tensor):
             if not torch.isfinite(tensor).all():
                 print(f"Warning: Non-finite values detected in {name}[{i}]. Clamping values.")
-            result.append(torch.clamp(tensor, min=-1.0, max=1.0))  # Use tighter bounds
+            result.append(torch.clamp(tensor, \
+                    STABILITY_CONFIG['tensor_value_clip'][0], \
+                    STABILITY_CONFIG['tensor_value_clip'][1]))  # min=-1.0, max=1.0
         else:
             result.append(tensor)
     return tuple(result)
@@ -189,7 +191,7 @@ opt.lr = 0.00001  # Reduced from 0.0001
 # Networks
 netG_content=Net_content()
 netG_haze = Net_hazy()
-net_dehaze  = ffa(3,5)
+net_dehaze  = ffa(MODEL_CONFIG['ffa_groups'], MODEL_CONFIG['ffa_blocks']) # ffa(3,5)
 net_G= Net_G()
 
 # JanYeh: Initialize weights properly
@@ -223,17 +225,26 @@ loss_network.eval()
 
 
 optimizer_G= torch.optim.Adam(itertools.chain(netG_content.parameters() ,net_dehaze.parameters(),netG_haze.parameters(),net_G.parameters()), \
-        lr=opt.lr, betas=(0.5, 0.999), eps=1e-8)
+        lr=opt.lr, betas=OPTIMIZER_CONFIG['adam_betas'], eps=OPTIMIZER_CONFIG['adam_eps'], \
+        weight_decay=OPTIMIZER_CONFIG['weight_decay'])
+        #lr=opt.lr, betas=(0.5, 0.999), eps=1e-8)
 
-lr_scheduler_G = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_G, T_max=100)
-dataloader1 = DataLoader(TrainDatasetFromFolder2('trainset/trainA_new',
-                                     'trainset/trainB_new',  'trainset/trainB_newsize_128',crop_size= 128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
+lr_scheduler_G = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_G, T_max=OPTIMIZER_CONFIG['scheduler_t_max']) # torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_G, T_max=100)
+dataloader1 = DataLoader(TrainDatasetFromFolder2('trainset/trainA_new', \
+        'trainset/trainB_new',  'trainset/trainB_newsize_128', \
+        crop_size=DATA_CONFIG['crop_size']),
+        batch_size=MEMORY_CONFIG['batch_size'],
+        shuffle=True,
+        pin_memory=DATA_CONFIG['pin_memory']
+        )
+        #crop_size= 128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
 # dataloader2 = DataLoader(TrainDatasetFromFolder4('/home/omnisky/4t/RESIDE/OTS_BETA/clear/clear_newsize',
 #                                              '/home/omnisky/4t/RESIDE/OTS_BETA/haze/hazy7',  '/home/omnisky/4t/realWorldHazeDataSet/trainA_newsize_128', crop_size=128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
 
 
-val_data_loader = DataLoader(TestDatasetFromFolder1('testdataset'),
-                       batch_size=opt.batchSize, shuffle=False, num_workers=opt.n_cpu)
+val_data_loader = DataLoader(TestDatasetFromFolder1('testdataset'), \
+        batch_size=MEMORY_CONFIG['batch_size'], shuffle=False, num_workers=DATA_CONFIG['num_workers'], \
+        pin_memory=DATA_CONFIG['pin_memory']) # batch_size=opt.batchSize, num_workers=opt.n_cpu
 
 logger1 = Logger(opt.n_epochs, len(dataloader1))
 # logger2 = Logger(opt.n_epochs, len(dataloader1))
@@ -380,18 +391,18 @@ for epoch in range(opt.epoch, opt.n_epochs):
             if check_tensor(loss_haze, "loss_haze"):
                 loss_components.append(loss_haze)
             # Add gradient clipping
-            max_grad_norm = 1.0
+            max_grad_norm = STABILITY_CONFIG['gradient_clip_norm'] # 1.0
             torch.nn.utils.clip_grad_norm_(
-                itertools.chain(netG_content.parameters(), 
-                              netG_haze.parameters(), 
-                              net_dehaze.parameters(), 
-                              net_G.parameters()), 
-                1.0
-            )
+                itertools.chain(netG_content.parameters(), \
+                        netG_haze.parameters(), \
+                        net_dehaze.parameters(), \
+                        net_G.parameters()), \
+                        max_grad_norm
+            ) # max_grad_norm was 1.0
             # JanYeh: End of safe loss calculations
 
             # loss_haze =  F.smooth_l1_loss(fake_hazy_A , real_B)  + loss_network(fake_hazy_A , real_B) * 0.04
-            loss_haze = compute_loss_safely(F.smooth_l1_loss, fake_hazy_A , real_B)  + compute_loss_safely(loss_network, fake_hazy_A , real_B) * 0.04
+            loss_haze = compute_loss_safely(F.smooth_l1_loss, fake_hazy_A , real_B)  + compute_loss_safely(loss_network, fake_hazy_A , real_B) * LOSS_WEIGHTS['perceptual_loss'] #0.04
             # Jan - debug
             if check_tensor(loss_haze, "loss_haze"):
                 loss_components.append(loss_haze)
@@ -457,17 +468,26 @@ for epoch in range(opt.epoch, opt.n_epochs):
 
             # Total loss
             # Add the remaining loss components
-            loss_components.extend([10*loss_dehaze, 0.01 * loss_DC_A, 2*1e-7*tv_loss, 0.001 *loss_CAP, 0.0001*loss_Lab])
+            #loss_components.extend([10*loss_dehaze, 0.01 * loss_DC_A, 2*1e-7*tv_loss, 0.001 *loss_CAP, 0.0001*loss_Lab])
+            loss_components.extend([ \
+                    LOSS_WEIGHTS['dehaze_loss'] * loss_dehaze, \
+                    LOSS_WEIGHTS['dc_loss'] * loss_DC_A, \
+                    LOSS_WEIGHTS['tv_loss'] * tv_loss, \
+                    LOSS_WEIGHTS['cap_loss'] * loss_CAP, \
+                    LOSS_WEIGHTS['lab_loss'] * loss_Lab \
+            ])
             # Jan - debug BEGIN
             if loss_components:
                 loss_G = sum(loss_components)
                 if check_tensor(loss_G, "loss_G"):
 
                     # Scale down large loss values
-                    if loss_G.item() > 100:
+                    if loss_G.item() > STABILITY_CONFIG['loss_scale_threshold']: # 100:
                         # scale_factor = min(100.0 / loss_G.item(), 0.1)  # Cap scaling factor
                         # loss_G = loss_G * scale_factor
-                        scale_factor = min(100.0 / loss_G.item(), 0.01)  # More aggressive scaling
+                        #scale_factor = min(100.0 / loss_G.item(), 0.01)  # More aggressive scaling
+                        scale_factor = min(STABILITY_CONFIG['loss_scale_threshold'] / loss_G.item(), \
+                                STABILITY_CONFIG['loss_scale_factor'])
                         loss_G = loss_G * scale_factor 
 
                         print(f"Scaling loss by factor {scale_factor}")
