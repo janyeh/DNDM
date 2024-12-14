@@ -260,8 +260,12 @@ dataloader1 = DataLoader(TrainDatasetFromFolder2('trainset/trainA_new', \
         pin_memory=DATA_CONFIG['pin_memory']
         )
         #crop_size= 128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
-# dataloader2 = DataLoader(TrainDatasetFromFolder4('/home/omnisky/4t/RESIDE/OTS_BETA/clear/clear_newsize',
-#                                              '/home/omnisky/4t/RESIDE/OTS_BETA/haze/hazy7',  '/home/omnisky/4t/realWorldHazeDataSet/trainA_newsize_128', crop_size=128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
+dataloader2 = DataLoader(TrainDatasetFromFolder4('/home/omnisky/4t/RESIDE/OTS_BETA/clear/clear_newsize',
+        '/home/omnisky/4t/RESIDE/OTS_BETA/haze/hazy7',  
+        '/home/omnisky/4t/realWorldHazeDataSet/trainA_newsize_128', 
+        crop_size=128), 
+        batch_size=opt.batchSize,
+        shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
 
 
 val_data_loader = DataLoader(TestDatasetFromFolder1('testdataset'), \
@@ -269,7 +273,7 @@ val_data_loader = DataLoader(TestDatasetFromFolder1('testdataset'), \
         pin_memory=DATA_CONFIG['pin_memory']) # batch_size=opt.batchSize, num_workers=opt.n_cpu
 
 logger1 = Logger(opt.n_epochs, len(dataloader1))
-# logger2 = Logger(opt.n_epochs, len(dataloader1))
+logger2 = Logger(opt.n_epochs, len(dataloader2))
 ###################################
 if not os.path.exists('output'):
     os.makedirs('output')
@@ -281,12 +285,12 @@ if not os.path.exists('./results'):
 safe_ops = SafeOps()
 for epoch in range(opt.epoch, opt.n_epochs):
 
-    # if not epoch%2 :
-    #     dataloader = dataloader1
-    # else :
-    #     dataloader = dataloader2
+    if not epoch%2 :
+        dataloader = dataloader1
+    else :
+        dataloader = dataloader2
     
-    dataloader = dataloader1
+    #dataloader = dataloader1
     
 
     ite = 0
