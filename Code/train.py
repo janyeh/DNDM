@@ -240,7 +240,7 @@ criterion_identity = torch.nn.L1Loss()
 vgg_model = vgg16(pretrained=True).features[:16]
 vgg_model = vgg_model.cuda()
 for param in vgg_model.parameters():
-     param.requires_grad = False
+    param.requires_grad = False
 
 loss_network = LossNetwork(vgg_model).cuda()
 loss_network.eval()
@@ -260,12 +260,19 @@ dataloader1 = DataLoader(TrainDatasetFromFolder2('trainset/trainA_new', \
         pin_memory=DATA_CONFIG['pin_memory']
         )
         #crop_size= 128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
-dataloader2 = DataLoader(TrainDatasetFromFolder4('/home/omnisky/4t/RESIDE/OTS_BETA/clear/clear_newsize',
-        '/home/omnisky/4t/RESIDE/OTS_BETA/haze/hazy7',  
-        '/home/omnisky/4t/realWorldHazeDataSet/trainA_newsize_128', 
+# dataloader2 = DataLoader(TrainDatasetFromFolder4('/home/omnisky/4t/RESIDE/OTS_BETA/clear/clear_newsize',
+#         '/home/omnisky/4t/RESIDE/OTS_BETA/haze/hazy7',  
+#         '/home/omnisky/4t/realWorldHazeDataSet/trainA_newsize_128', 
+#         crop_size=128), 
+#         batch_size=opt.batchSize,
+#         shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
+dataloader2 = DataLoader(TrainDatasetFromFolder4('trainset/DATA2/dataset2_clear',
+        'trainset/DATA2/dataset2_haze',  
+        'trainset/trainA_newsize_128', 
         crop_size=128), 
         batch_size=opt.batchSize,
         shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
+
 
 
 val_data_loader = DataLoader(TestDatasetFromFolder1('testdataset'), \

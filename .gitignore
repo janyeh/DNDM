@@ -1,5 +1,6 @@
 .DS_Store
 Code/__pycache__/
+.ssh/
 venv/
 testdataset/
 trainset/
