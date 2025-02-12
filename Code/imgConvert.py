@@ -39,7 +39,12 @@ def convert_images(source_path, target_path, width, height):
         try:
             # Open and resize image
             with Image.open(source_file) as img:
-                resized_img = img.resize((width, height), Image.Resampling.LANCZOS)
+                try:
+                    # Try newer PIL version method
+                    resized_img = img.resize((width, height), Image.Resampling.LANCZOS)
+                except AttributeError:
+                    # Fall back to older PIL version method
+                    resized_img = img.resize((width, height), Image.ANTIALIAS)
                 resized_img.save(target_file)
             print(f"Converted '{filename}' successfully")
         except Exception as e:
