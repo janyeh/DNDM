@@ -268,7 +268,7 @@ dataloader1 = DataLoader(TrainDatasetFromFolder2('trainset/trainA_new', \
 #         shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
 dataloader2 = DataLoader(TrainDatasetFromFolder4('trainset/DATA2/dataset2_clear',
         'trainset/DATA2/dataset2_haze',  
-        'trainset/trainA_newsize_128', 
+        'trainset/DATA2/dataset2_clearnew_128', 
         crop_size=128), 
         batch_size=opt.batchSize,
         shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
