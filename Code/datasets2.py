@@ -304,6 +304,12 @@ class TrainDatasetFromFolder1(Dataset):
 class TrainDatasetFromFolder2(Dataset):
     def __init__(self, dataset_dir_c,dataset_dir_h,  dataset_real,crop_size):
         super(TrainDatasetFromFolder2, self).__init__()
+        
+        print(f"(TrainDatasetFromFolder2) Directory contents:")
+        print(f"dataset_dir_c ({dataset_dir_c}): {len(listdir(dataset_dir_c))} files")
+        print(f"dataset_dir_h ({dataset_dir_h}): {len(listdir(dataset_dir_h))} files")
+        print(f"dataset_real ({dataset_real}): {len(listdir(dataset_real))} files")        
+        
         self.image_filenames_A = [join(dataset_dir_c, x) for x in natsort.natsorted(listdir(dataset_dir_c))[0:1399] for p in range(10) if is_image_file(x)]
         self.image_filenames_B = [join(dataset_dir_h, x) for x in natsort.natsorted(listdir(dataset_dir_h))[0:13990]  if is_image_file(x)]
         self.image_filenames_C = [join(dataset_real, x) for x in natsort.natsorted(listdir(dataset_real))[0:13990]   if is_image_file(x)]
@@ -313,7 +319,13 @@ class TrainDatasetFromFolder2(Dataset):
         # self.image_filenames_C = [join(dataset_real, x) for x in  natsort.natsorted(listdir(dataset_real))[0:14427] if is_image_file(x)]
 
        # self.image_filenames_s = [join(dataset_dir_s, x) for x in natsort.natsorted(listdir(dataset_dir_s))[0:5000] if is_image_file(x)] #for p  in range(10)
-
+        
+        # Verify lengths
+        print(f"\n(TrainDatasetFromFolder2) Final dataset sizes:")
+        print(f"A: {len(self.image_filenames_A)} files")
+        print(f"B: {len(self.image_filenames_B)} files")
+        print(f"C: {len(self.image_filenames_C)} files")
+        
         crop_size = calculate_valid_crop_size(crop_size)
         self.c_transform = train_s_transform(crop_size)
         self.h_transform = train_s_transform(crop_size)
@@ -343,7 +355,7 @@ class TrainDatasetFromFolder4(Dataset):
         # self.image_filenames_C = [join(dataset_real, x) for x in  natsort.natsorted(listdir(dataset_real))[0:20000] if is_image_file(x)]
 
         # Print directory contents for debugging
-        print(f"Directory contents:")
+        print(f"(TrainDatasetFromFolder4) Directory contents:")
         print(f"dataset_dir_c ({dataset_dir_c}): {len(listdir(dataset_dir_c))} files")
         print(f"dataset_dir_h ({dataset_dir_h}): {len(listdir(dataset_dir_h))} files")
         print(f"dataset_real ({dataset_real}): {len(listdir(dataset_real))} files")
@@ -358,7 +370,7 @@ class TrainDatasetFromFolder4(Dataset):
         self.image_filenames_C = [join(dataset_real, x) for x in  natsort.natsorted(listdir(dataset_real))[0:14427] if is_image_file(x)]
 
         # Verify lengths
-        print(f"\nFinal dataset sizes:")
+        print(f"\n(TrainDatasetFromFolder4) Final dataset sizes:")
         print(f"A: {len(self.image_filenames_A)} files")
         print(f"B: {len(self.image_filenames_B)} files")
         print(f"C: {len(self.image_filenames_C)} files")
