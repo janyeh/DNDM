@@ -52,7 +52,8 @@ net_dehaze.eval()
 # Inputs & targets memory allocation
 Tensor = torch.cuda.FloatTensor if opt.cuda else torch.Tensor
 
-dataloader = DataLoader(TestDatasetFromFolder2('/home/omnisky/4t/JTY/testdataset/test_new'))#real test-rrrrrr  mytest_A  test-rrrrrr  /home/omnisky/4t/JTY/testdataset/test_new
+#dataloader = DataLoader(TestDatasetFromFolder2('/home/omnisky/4t/JTY/testdataset/test_new'))#real test-rrrrrr  mytest_A  test-rrrrrr  /home/omnisky/4t/JTY/testdataset/test_new
+dataloader = DataLoader(TestDatasetFromFolder2('testdataset/test_new'))#real test-rrrrrr  mytest_A  test-rrrrrr  /home/omnisky/4t/JTY/testdataset/test_new
 
 ###################################
 
