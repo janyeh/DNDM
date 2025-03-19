@@ -167,11 +167,20 @@ class ffa(nn.Module):
             if not self.check_tensor(out, "after_palayer"):
                 return out  # Return the last valid output
                 
-            x=safe_clamp(self.post(out), "post")
-            if not self.check_tensor(x, "final_output"):
-                return out  # Return the last valid output
+            # x=safe_clamp(self.post(out), "post")
+            # if not self.check_tensor(x, "final_output"):
+            #     return out  # Return the last valid output
                 
-            return x
+            # return x
+            # fix above code to ensure 3-channel output                     
+            x = safe_clamp(self.post(out), "post")
+            if not self.check_tensor(x, "final_output"):
+                print("Warning: final output contains non-finite values, applying nan_to_num")
+                x = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
+                # Optionally, check again and if necessary force a 3-channel tensor:
+                if x.size(1) != 3:
+                    x = x[:, :3, :, :]
+            return x        
         except Exception as e:
             print(f"Error in forward pass: {e}")
             # Try to return the last valid output, falling back to pre-processed input

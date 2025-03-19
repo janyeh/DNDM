@@ -42,4 +42,5 @@ fi
 # echo "Elapsed time (HH:MM:SS): $human_readable_time" >> "$log_file" # Log human-readable time
 # echo "------------------------------------" >> "$log_file"
 
-exit 0
+# notify
+python notify.py "DNDM in school testing is done"
