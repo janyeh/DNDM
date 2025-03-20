@@ -21,7 +21,8 @@ def DCLoss(img, patch_size):
     
     target = Variable(torch.FloatTensor(dc.shape).zero_().cuda()) 
      
-    loss = L1Loss(size_average=True)(-dc, target)
+    #loss = L1Loss(size_average=True)(-dc, target) # size_average=True is deprecated
+    loss = L1Loss(reduction='mean')(-dc, target)
     return loss
 
 def BCLoss(img, patch_size):
