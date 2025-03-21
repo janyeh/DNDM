@@ -114,7 +114,7 @@ class ffa(nn.Module):
         print(f"{name} shape: {tensor.shape}, min: {tensor.min().item()}, max: {tensor.max().item()}, mean: {tensor.mean().item()}")
         return True
     
-    def forward(self, x1, meta):
+    # def forward(self, x1, meta):
         # JanYeh DEBUG BEGIN
         # JanYeh: Clamp meta before using it in channel attention
         meta = torch.clamp(meta, min=-1.0, max=1.0)
@@ -193,8 +193,54 @@ class ffa(nn.Module):
         # print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
         # JanYeh DEBUG END
 
+    def forward(self, x1, meta):
+        # Clamp meta before using it in channel attention
+        meta = torch.clamp(meta, min=-1.0, max=1.0)
         
-
+        # Preprocess input
+        x = safe_clamp(self.pre(x1), "pre")
+        
+        res1 = safe_clamp(self.g1(x), "g1")
+        res2 = safe_clamp(self.g2(res1), "g2")
+        res3 = safe_clamp(self.g3(res2), "g3")
+        
+        w = safe_clamp(self.ca(meta), "ca")
+        try:
+            w = safe_clamp(w.view(-1, self.gps, self.dim)[:, :, :, None, None], "view")
+        except Exception as e:
+            print(f"Error in weight reshape: {e}")
+            # Force fallback: use preprocessed x and ensure 3 channels
+            fallback = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
+            return fallback if fallback.size(1) == 3 else fallback[:, :3, :, :]
+        
+        # Check critical tensors; if invalid, force fallback
+        if not self.check_tensor(w, "weights") or not self.check_tensor(res1, "res1") or \
+           not self.check_tensor(res2, "res2") or not self.check_tensor(res3, "res3"):
+            print("Warning: One of the intermediate tensors is non-finite. Forcing fallback.")
+            fallback = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
+            return fallback if fallback.size(1) == 3 else fallback[:, :3, :, :]
+        
+        try:
+            out = safe_clamp(w[:, 0, ::]*res1 + w[:, 1, ::]*res2 + w[:, 2, ::]*res3, "weighted_sum")
+            if not self.check_tensor(out, "weighted_sum"):
+                print("Warning: weighted_sum non-finite. Forcing fallback via nan_to_num.")
+                out = torch.nan_to_num(out, nan=0.0, posinf=1.0, neginf=-1.0)
+            out = safe_clamp(self.palayer(out), "palayer")
+            if not self.check_tensor(out, "after_palayer"):
+                print("Warning: after_palayer non-finite. Forcing fallback via nan_to_num.")
+                out = torch.nan_to_num(out, nan=0.0, posinf=1.0, neginf=-1.0)
+            x_out = safe_clamp(self.post(out), "post")
+            if not self.check_tensor(x_out, "final_output"):
+                print("Warning: final output non-finite. Applying nan_to_num and slicing to 3 channels.")
+                x_out = torch.nan_to_num(x_out, nan=0.0, posinf=1.0, neginf=-1.0)
+                if x_out.size(1) != 3:
+                    x_out = x_out[:, :3, :, :]
+            return x_out
+        except Exception as e:
+            print(f"Error in forward pass of ffa: {e}")
+            fallback = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
+            return fallback if fallback.size(1) == 3 else fallback[:, :3, :, :]
+        
 class ffa1(nn.Module):
     def __init__(self,gps,blocks,conv=default_conv):
         super(ffa1, self).__init__()

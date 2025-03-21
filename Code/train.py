@@ -383,9 +383,14 @@ for epoch in range(opt.epoch, opt.n_epochs):
 
             fake_hazy_A = safe_ops.safe_tensor_ops(net_G(content_A,haze_mask_B), "net_G(content_A,haze_mask_B)")
             # JanYeh: Check for NaN or Inf after computing fake_hazy_A
+            # if not torch.isfinite(fake_hazy_A).all():
+            #     print("NaN or Inf detected in fake_hazy_A, skipping iteration")
+            #     continue
             if not torch.isfinite(fake_hazy_A).all():
-                print("NaN or Inf detected in fake_hazy_A, skipping iteration")
-                continue
+                print("NaN or Inf detected in fake_hazy_A, forcing fallback: applying nan_to_num and slicing to 3 channels")
+                fake_hazy_A = torch.nan_to_num(fake_hazy_A, nan=0.0, posinf=1.0, neginf=-1.0)
+                if fake_hazy_A.size(1) != 3:
+                    fake_hazy_A = fake_hazy_A[:, :3, :, :]
             check_tensor(fake_hazy_A, "fake_hazy_A")
 
             content_fake_hazy_A, con_fake_hazy_A  = safe_clamp_tuple(netG_content(fake_hazy_A ), "netG_content(fake_hazy_A )")
@@ -630,9 +635,14 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 else:
                     real_B = safe_ops.reshape_for_output(real_B)
 
+                # if dehaze_B is None:
+                #     dehaze_B = torch.zeros_like(dehaze_B)
+                #     print(f"ERROR: dehaze_B is None, set to zero. Path="+f"{'./results/Outputs/%05d.png' % (int(i))}") 
+                # else:
+                #     dehaze_B = safe_ops.reshape_for_output(dehaze_B)
                 if dehaze_B is None:
-                    dehaze_B = torch.zeros_like(dehaze_B)
-                    print(f"ERROR: dehaze_B is None, set to zero. Path="+f"{'./results/Outputs/%05d.png' % (int(i))}") 
+                    print(f"ERROR: dehaze_B is None, forcing fallback using zero tensor of shape {real_B.shape}")
+                    dehaze_B = torch.zeros_like(real_B)
                 else:
                     dehaze_B = safe_ops.reshape_for_output(dehaze_B)
                 
@@ -649,7 +659,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
                     
                     vutils.save_image(real_A.float()/255.0, './results/Targets/%05d.png' % (int(i)), padding=0)
                     vutils.save_image(real_B.float()/255.0, './results/Inputs/%05d.png' % (int(i)), padding=0)
-                    vutils.save_image(dehaze_B.float()/255.0, './results/Outputs/%05d.png' % (int(i)), padding=0)
+                    vutils.save_image(dehaze_B.float()/255.0, './results/Outputs/%05d.png' % (int(i)), padding=0)                    
                 except Exception as e:
                     print(f"Error in saving images: str{e}\n{traceback.format_exc()}, shapes: A={real_A.shape}, B={real_B.shape}, dehaze={dehaze_B.shape}")
 
