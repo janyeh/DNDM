@@ -1,6 +1,16 @@
 import torch.nn as nn
 import torch
 
+## JanYeh: Add custom nan_to_num if not available in torch (for PyTorch versions older than 1.8)
+if not hasattr(torch, 'nan_to_num'):
+    def nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0):
+        x = torch.where(torch.isnan(x), torch.full_like(x, nan), x)
+        x = torch.where(torch.isposinf(x), torch.full_like(x, posinf), x)
+        x = torch.where(torch.isneginf(x), torch.full_like(x, neginf), x)
+        return x
+else:
+    nan_to_num = torch.nan_to_num
+
 def default_conv(in_channels, out_channels, kernel_size, bias=True):
     return nn.Conv2d(in_channels, out_channels, kernel_size,padding=(kernel_size//2), bias=bias)
 
@@ -117,81 +127,81 @@ class ffa(nn.Module):
     # def forward(self, x1, meta):
         # JanYeh DEBUG BEGIN
         # JanYeh: Clamp meta before using it in channel attention
-        meta = torch.clamp(meta, min=-1.0, max=1.0)
+        # meta = torch.clamp(meta, min=-1.0, max=1.0)
         
-        x = safe_clamp(self.pre(x1), "pre")
+        # x = safe_clamp(self.pre(x1), "pre")
 
-        # JanYeh: Check for NaN or Inf after pre-processing
+        # # JanYeh: Check for NaN or Inf after pre-processing
         
-        res1=safe_clamp(self.g1(x), "g1")
-        res2=safe_clamp(self.g2(res1), "g2")
-        res3=safe_clamp(self.g3(res2), "g3")
-        # JanYeh: Clamp and Check for NaN or Inf after group layers
+        # res1=safe_clamp(self.g1(x), "g1")
+        # res2=safe_clamp(self.g2(res1), "g2")
+        # res3=safe_clamp(self.g3(res2), "g3")
+        # # JanYeh: Clamp and Check for NaN or Inf after group layers
         
-        w=safe_clamp(self.ca(meta), "ca")
+        # w=safe_clamp(self.ca(meta), "ca")
 
-        # JanYeh: clamp the weights to prevent exploding gradient
-        # Print the shapes of the tensors for debugging
-        # print(f"res1 shape: {res1.shape}")
-        # print(f"res2 shape: {res2.shape}")
-        # print(f"res3 shape: {res3.shape}")
-        # print(f"w shape before view: {w.shape}")
+        # # JanYeh: clamp the weights to prevent exploding gradient
+        # # Print the shapes of the tensors for debugging
+        # # print(f"res1 shape: {res1.shape}")
+        # # print(f"res2 shape: {res2.shape}")
+        # # print(f"res3 shape: {res3.shape}")
+        # # print(f"w shape before view: {w.shape}")
 
-        # Reshape and apply weights to residuals
-        try:
-            w=safe_clamp(w.view(-1,self.gps,self.dim)[:,:,:,None,None], "view")
-        except Exception as e:
-            print(f"Error in weight operation: {e}")
-            return x
-        # JanYeh: Check for NaNs or Infs in w and handle them
+        # # Reshape and apply weights to residuals
+        # try:
+        #     w=safe_clamp(w.view(-1,self.gps,self.dim)[:,:,:,None,None], "view")
+        # except Exception as e:
+        #     print(f"Error in weight operation: {e}")
+        #     return x
+        # # JanYeh: Check for NaNs or Infs in w and handle them
 
-        # JanYeh: Check for NaNs or Infs in out and handle them
+        # # JanYeh: Check for NaNs or Infs in out and handle them
 
-        if not self.check_tensor(w, "weights") or \
-            not self.check_tensor(res1, "res1") or \
-            not self.check_tensor(res2, "res2") or \
-            not self.check_tensor(res3, "res3"):
-            # Return the pre-processed input if any tensor is invalid
-            return x
+        # if not self.check_tensor(w, "weights") or \
+        #     not self.check_tensor(res1, "res1") or \
+        #     not self.check_tensor(res2, "res2") or \
+        #     not self.check_tensor(res3, "res3"):
+        #     # Return the pre-processed input if any tensor is invalid
+        #     return x
 
 
-        #out=safe_clamp(w[:,0,::]*res1+w[:,1,::]*res2+w[:,2,::]*res3, "out")
-        #out=safe_clamp(self.palayer(out), "palayer")
-        #x=safe_clamp(self.post(out), "post")
-        try:
-            out=safe_clamp(w[:,0,::]*res1+w[:,1,::]*res2+w[:,2,::]*res3, "weighted_sum")
-            if not self.check_tensor(out, "weighted_sum"):
-                return x
+        # #out=safe_clamp(w[:,0,::]*res1+w[:,1,::]*res2+w[:,2,::]*res3, "out")
+        # #out=safe_clamp(self.palayer(out), "palayer")
+        # #x=safe_clamp(self.post(out), "post")
+        # try:
+        #     out=safe_clamp(w[:,0,::]*res1+w[:,1,::]*res2+w[:,2,::]*res3, "weighted_sum")
+        #     if not self.check_tensor(out, "weighted_sum"):
+        #         return x
 
-            out=safe_clamp(self.palayer(out), "palayer")
-            if not self.check_tensor(out, "after_palayer"):
-                return out  # Return the last valid output
+        #     out=safe_clamp(self.palayer(out), "palayer")
+        #     if not self.check_tensor(out, "after_palayer"):
+        #         return out  # Return the last valid output
                 
-            # x=safe_clamp(self.post(out), "post")
-            # if not self.check_tensor(x, "final_output"):
-            #     return out  # Return the last valid output
+        #     # x=safe_clamp(self.post(out), "post")
+        #     # if not self.check_tensor(x, "final_output"):
+        #     #     return out  # Return the last valid output
                 
-            # return x
-            # fix above code to ensure 3-channel output                     
-            x = safe_clamp(self.post(out), "post")
-            if not self.check_tensor(x, "final_output"):
-                print("Warning: final output contains non-finite values, applying nan_to_num")
-                x = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
-                # Optionally, check again and if necessary force a 3-channel tensor:
-                if x.size(1) != 3:
-                    x = x[:, :3, :, :]
-            return x        
-        except Exception as e:
-            print(f"Error in forward pass: {e}")
-            # Try to return the last valid output, falling back to pre-processed input
-            if 'out' in locals() and out is not None and torch.isfinite(out).all():
-                return out[:, :3, :, :]
-            return x[:, :3, :, :]
+        #     # return x
+        #     # fix above code to ensure 3-channel output                     
+        #     x = safe_clamp(self.post(out), "post")
+        #     if not self.check_tensor(x, "final_output"):
+        #         print("Warning: final output contains non-finite values, applying nan_to_num")
+        #         x = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
+        #         # Optionally, check again and if necessary force a 3-channel tensor:
+        #         if x.size(1) != 3:
+        #             x = x[:, :3, :, :]
+        #     return x        
+        # except Exception as e:
+        #     print(f"Error in forward pass: {e}")
+        #     # Try to return the last valid output, falling back to pre-processed input
+        #     if 'out' in locals() and out is not None and torch.isfinite(out).all():
+        #         return out[:, :3, :, :]
+        #     return x[:, :3, :, :]
 
-        # Memory usage after final layer
-        # print(f"Memory allocated after PALayer and Post Layer: {torch.cuda.memory_allocated()} bytes")
-        # print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
-        # JanYeh DEBUG END
+        # # Memory usage after final layer
+        # # print(f"Memory allocated after PALayer and Post Layer: {torch.cuda.memory_allocated()} bytes")
+        # # print(f"Max memory allocated so far: {torch.cuda.max_memory_allocated()} bytes")
+        # # JanYeh DEBUG END
 
     def forward(self, x1, meta):
         # Clamp meta before using it in channel attention
