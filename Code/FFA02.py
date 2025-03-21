@@ -185,8 +185,8 @@ class ffa(nn.Module):
             print(f"Error in forward pass: {e}")
             # Try to return the last valid output, falling back to pre-processed input
             if 'out' in locals() and out is not None and torch.isfinite(out).all():
-                return out
-            return x
+                return out[:, :3, :, :]
+            return x[:, :3, :, :]
 
         # Memory usage after final layer
         # print(f"Memory allocated after PALayer and Post Layer: {torch.cuda.memory_allocated()} bytes")
