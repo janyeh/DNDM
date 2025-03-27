@@ -3,6 +3,10 @@ import torch
 
 ## JanYeh: Add custom nan_to_num if not available in torch (for PyTorch versions older than 1.8)
 if not hasattr(torch, 'nan_to_num'):
+    def isposinf(x):
+        return torch.isinf(x) & (x > 0)
+    def isneginf(x):
+        return torch.isinf(x) & (x < 0)
     def nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0):
         x = torch.where(torch.isnan(x), torch.full_like(x, nan), x)
         x = torch.where(torch.isposinf(x), torch.full_like(x, posinf), x)
@@ -34,7 +38,7 @@ def safe_clamp_tuple(tuple_tensor, name="", min=-1.0, max=1.0):
 def safe_clamp(tensor, name="", min=-1.0, max=1.0): 
     tensor = nan_to_num(tensor)
     return safe_clamp_tuple((tensor,), name)[0]
-
+ 
 class PALayer(nn.Module):
     def __init__(self, channel):
         super(PALayer, self).__init__()
