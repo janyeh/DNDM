@@ -32,6 +32,7 @@ def safe_clamp_tuple(tuple_tensor, name="", min=-1.0, max=1.0):
     return tuple(result)
 
 def safe_clamp(tensor, name="", min=-1.0, max=1.0): 
+    tensor = nan_to_num(tensor)
     return safe_clamp_tuple((tensor,), name)[0]
 
 class PALayer(nn.Module):
