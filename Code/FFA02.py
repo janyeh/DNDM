@@ -2,18 +2,27 @@ import torch.nn as nn
 import torch
 
 ## JanYeh: Add custom nan_to_num if not available in torch (for PyTorch versions older than 1.8)
-if not hasattr(torch, 'nan_to_num'):
-    def isposinf(x):
-        return torch.isinf(x) & (x > 0)
-    def isneginf(x):
-        return torch.isinf(x) & (x < 0)
-    def nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0):
-        x = torch.where(torch.isnan(x), torch.full_like(x, nan), x)
-        x = torch.where(torch.isposinf(x), torch.full_like(x, posinf), x)
-        x = torch.where(torch.isneginf(x), torch.full_like(x, neginf), x)
-        return x
-else:
-    nan_to_num = torch.nan_to_num
+# if not hasattr(torch, 'nan_to_num'):
+#     def isposinf(x):
+#         return torch.isinf(x) & (x > 0)
+#     def isneginf(x):
+#         return torch.isinf(x) & (x < 0)
+#     def nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0):
+#         x = torch.where(torch.isnan(x), torch.full_like(x, nan), x)
+#         x = torch.where(torch.isposinf(x), torch.full_like(x, posinf), x)
+#         x = torch.where(torch.isneginf(x), torch.full_like(x, neginf), x)
+#         return x
+# else:
+#     nan_to_num = torch.nan_to_num
+def isposinf(x):
+    return torch.isinf(x) & (x > 0)
+def isneginf(x):
+    return torch.isinf(x) & (x < 0)
+def nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0):
+    x = torch.where(torch.isnan(x), torch.full_like(x, nan), x)
+    x = torch.where(torch.isposinf(x), torch.full_like(x, posinf), x)
+    x = torch.where(torch.isneginf(x), torch.full_like(x, neginf), x)
+    return x
 
 def default_conv(in_channels, out_channels, kernel_size, bias=True):
     return nn.Conv2d(in_channels, out_channels, kernel_size,padding=(kernel_size//2), bias=bias)
@@ -225,35 +234,41 @@ class ffa(nn.Module):
         except Exception as e:
             print(f"Error in weight reshape: {e}")
             # Force fallback: use preprocessed x and ensure 3 channels
-            fallback = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
+            # fallback = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
+            fallback = nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
             return fallback if fallback.size(1) == 3 else fallback[:, :3, :, :]
         
         # Check critical tensors; if invalid, force fallback
         if not self.check_tensor(w, "weights") or not self.check_tensor(res1, "res1") or \
            not self.check_tensor(res2, "res2") or not self.check_tensor(res3, "res3"):
             print("Warning: One of the intermediate tensors is non-finite. Forcing fallback.")
-            fallback = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
+            # fallback = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
+            fallback = nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
             return fallback if fallback.size(1) == 3 else fallback[:, :3, :, :]
         
         try:
             out = safe_clamp(w[:, 0, ::]*res1 + w[:, 1, ::]*res2 + w[:, 2, ::]*res3, "weighted_sum")
             if not self.check_tensor(out, "weighted_sum"):
                 print("Warning: weighted_sum non-finite. Forcing fallback via nan_to_num.")
-                out = torch.nan_to_num(out, nan=0.0, posinf=1.0, neginf=-1.0)
+                # out = torch.nan_to_num(out, nan=0.0, posinf=1.0, neginf=-1.0)
+                out = nan_to_num(out, nan=0.0, posinf=1.0, neginf=-1.0)
             out = safe_clamp(self.palayer(out), "palayer")
             if not self.check_tensor(out, "after_palayer"):
                 print("Warning: after_palayer non-finite. Forcing fallback via nan_to_num.")
-                out = torch.nan_to_num(out, nan=0.0, posinf=1.0, neginf=-1.0)
+                # out = torch.nan_to_num(out, nan=0.0, posinf=1.0, neginf=-1.0)
+                out = nan_to_num(out, nan=0.0, posinf=1.0, neginf=-1.0)
             x_out = safe_clamp(self.post(out), "post")
             if not self.check_tensor(x_out, "final_output"):
                 print("Warning: final output non-finite. Applying nan_to_num and slicing to 3 channels.")
-                x_out = torch.nan_to_num(x_out, nan=0.0, posinf=1.0, neginf=-1.0)
+                # x_out = torch.nan_to_num(x_out, nan=0.0, posinf=1.0, neginf=-1.0)
+                x_out = nan_to_num(x_out, nan=0.0, posinf=1.0, neginf=-1.0)
                 if x_out.size(1) != 3:
                     x_out = x_out[:, :3, :, :]
             return x_out
         except Exception as e:
             print(f"Error in forward pass of ffa: {e}")
-            fallback = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
+            # fallback = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
+            fallback = nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
             return fallback if fallback.size(1) == 3 else fallback[:, :3, :, :]
         
 class ffa1(nn.Module):
