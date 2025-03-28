@@ -3,6 +3,8 @@ import numpy as np
 from PIL import Image
 from skimage.measure import compare_psnr, compare_ssim
 import natsort
+import notify as discord
+
 val_ite = 0
 psnr = 0
 ssim = 0
@@ -22,6 +24,8 @@ for i, (path_in, path_ref) in enumerate(imglist):
     print(path_in, path_ref)
     ref = Image.open(path_ref).convert('RGB')
     # print(ref.type)
+
+    discord.send_discord_message(f"psnr_ssim: {np.array(ref).shape}")
 
     ref = np.array(ref) / 255.
     # print(ref.shape)

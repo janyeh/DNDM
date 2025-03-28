@@ -8,7 +8,8 @@ def send_discord_message(message):
     message: The message content to send.
   """
 
-  webhook_url = "https://discord.com/api/webhooks/1304707589728112700/_2I5ghNrAJeAWYnOJ1kMLScdLt1tGUY75mcq3Aoq_pyk3-sAx-q7x4myxKBerP4_fdAd"
+  webhook_url = "https://discord.com/api/webhooks/1355029822015017090/75pm9-gXjNzIb3h4_XrIoT-8-HIFWg8xAH0asjCcnDHccqzMLE8KeoqV6OJKULWssDgK"
+  
   data = {"content": message}
 
   response = requests.post(webhook_url, json=data)
