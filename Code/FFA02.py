@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch
+import torch.nn.functional as F
 
 ## JanYeh: Add custom nan_to_num if not available in torch (for PyTorch versions older than 1.8)
 # if not hasattr(torch, 'nan_to_num'):
@@ -23,6 +24,9 @@ def nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0):
     x = torch.where(isposinf(x), torch.full_like(x, posinf), x)
     x = torch.where(isneginf(x), torch.full_like(x, neginf), x)
     return x
+
+# JanYeh: Add custom sigmoid if not available in torch (for PyTorch versions older than 1.8)
+torch.sigmoid = torch.nn.functional.sigmoid
 
 def default_conv(in_channels, out_channels, kernel_size, bias=True):
     return nn.Conv2d(in_channels, out_channels, kernel_size,padding=(kernel_size//2), bias=bias)
