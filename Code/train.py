@@ -316,8 +316,8 @@ for epoch in range(opt.epoch, opt.n_epochs):
     # In training loop
     for i, batch in enumerate(dataloader):
         # Jan - debug for shorter training
-        if i >= max_debug_iterations:
-            break
+        # if i >= max_debug_iterations:
+        #     break
 
         # Set model input
         real_A = Variable(batch['A']).cuda(0)#clear
