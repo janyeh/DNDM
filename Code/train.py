@@ -680,7 +680,8 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 hr_patch[hr_patch < 0] = 0
                 hr_patch = hr_patch.transpose((1, 2, 0))
                 # SSIM
-                test_ssim += ski_ssim(output, hr_patch, data_range=1, multichannel=True)
+                # test_ssim += ski_ssim(output, hr_patch, data_range=1, multichannel=True)
+                test_ssim += ski_ssim(output, hr_patch, data_range=1, win_size=5, channel_axis=-1)
                 # PSNR
                 imdf = (output - hr_patch) ** 2
                 mse = np.mean(imdf) + eps
