@@ -31,7 +31,7 @@ torch.sigmoid = torch.nn.functional.sigmoid
 def default_conv(in_channels, out_channels, kernel_size, bias=True):
     return nn.Conv2d(in_channels, out_channels, kernel_size,padding=(kernel_size//2), bias=bias)
 
-def safe_clamp_tuple(tuple_tensor, name="", min=-1.0, max=1.0):
+def safe_clamp_tuple(tuple_tensor, name="", min=-1e8, max=1e8):
     """
     Safely clamp tuple of tensors, handling None values and providing warnings
     Returns tuple of clamped tensors
@@ -48,7 +48,7 @@ def safe_clamp_tuple(tuple_tensor, name="", min=-1.0, max=1.0):
             result.append(None)
     return tuple(result)
 
-def safe_clamp(tensor, name="", min=-1.0, max=1.0): 
+def safe_clamp(tensor, name="", min=-1e8, max=1e8): 
     tensor = nan_to_num(tensor)
     return safe_clamp_tuple((tensor,), name)[0]
  
