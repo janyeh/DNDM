@@ -18,13 +18,20 @@ elapsed_seconds=$(echo "$elapsed_ms / 1000" | bc)
 # 6. Print the elapsed time in seconds (with 4 decimal places)
 printf "Elapsed time (seconds): %.4f\n" "$elapsed_seconds"
 
-# 7. Convert elapsed seconds to HH:MM:SS format (using GNU date).
+# 7. Convert elapsed seconds to DD HH:MM:SS format (using GNU date).
 #    Check for empty and command existence
 if [ -n "$elapsed_seconds" ] && command -v date > /dev/null 2>&1; then
     # Truncate to whole seconds before converting
     elapsed_seconds_int=$(printf "%.0f" "$elapsed_seconds")
-    human_readable_time=$(date -u -d "@$elapsed_seconds_int" +"%H:%M:%S")
-    echo "Elapsed time (HH:MM:SS): $human_readable_time"
+    
+    # Calculate days and remaining seconds
+    days=$((elapsed_seconds_int / 86400))
+    remaining_seconds=$((elapsed_seconds_int % 86400))
+    
+    # Get HH:MM:SS for remaining time
+    time_format=$(date -u -d "@$remaining_seconds" +"%H:%M:%S")
+    human_readable_time=$(printf "%02d %s" "$days" "$time_format")
+    echo "Elapsed time (DD HH:MM:SS): $human_readable_time"
 fi
 
 # --- Optional error handling (uncomment to use) ---
