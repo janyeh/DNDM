@@ -20,9 +20,15 @@ def isposinf(x):
 def isneginf(x):
     return torch.isinf(x) & (x < 0)
 def nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0):
-    x = torch.where(torch.isnan(x), torch.full_like(x, nan), x)
-    x = torch.where(isposinf(x), torch.full_like(x, posinf), x)
-    x = torch.where(isneginf(x), torch.full_like(x, neginf), x)
+    # x = torch.where(torch.isnan(x), torch.full_like(x, nan), x)
+    # x = torch.where(isposinf(x), torch.full_like(x, posinf), x)
+    # x = torch.where(isneginf(x), torch.full_like(x, neginf), x)
+    # return x
+    if torch.isnan(x).any():
+        x = torch.where(torch.isnan(x), torch.full_like(x, nan), x)
+    if torch.isinf(x).any():
+        x = torch.where(isposinf(x), torch.full_like(x, posinf), x)
+        x = torch.where(isneginf(x), torch.full_like(x, neginf), x)
     return x
 
 # JanYeh: Add custom sigmoid if not available in torch (for PyTorch versions older than 1.8)
