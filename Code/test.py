@@ -11,6 +11,9 @@ from FFA02 import ffa
 import os
 from utils21 import *
 
+# set memory allocation to expandable segments
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--batchSize', type=int, default=1, help='size of the batches')
 parser.add_argument('--dataroot', type=str, default='testdataset', help='root directory of the dataset')
