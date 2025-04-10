@@ -143,7 +143,7 @@ with torch.no_grad():
     hr_patch = hr_patch.transpose((1, 2, 0))
     #print(hr_patch)
     # SSIM
-    ssim = ski_ssim(output, hr_patch, data_range=1, multichannel=True)
+    ssim = ski_ssim(output, hr_patch, data_range=1, win_size=5, multichannel=True)
     test_ssim += ssim  # ski_ssim(output, hr_patch, data_range=1, multichannel=True)
     # PSNR
     imdf = (output - hr_patch) ** 2
