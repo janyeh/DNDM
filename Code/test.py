@@ -146,7 +146,17 @@ with torch.no_grad():
     hr_patch = hr_patch.transpose((1, 2, 0))
     #print(hr_patch)
     # SSIM
-    ssim = ski_ssim(output, hr_patch, data_range=1, win_size=5, multichannel=True)
+    #ssim = ski_ssim(output, hr_patch, data_range=1, win_size=5, multichannel=True)
+    # SSIM: adjust win_size based on image dimensions and use channel_axis instead of multichannel
+    h, w, c = output.shape
+    adj_win_size = 5
+    if h < 5 or w < 5:
+        adj_win_size = min(h, w)
+        if adj_win_size % 2 == 0:
+            adj_win_size -= 1
+        if adj_win_size < 3:
+            adj_win_size = 3
+    ssim = ski_ssim(output, hr_patch, data_range=1, win_size=adj_win_size, channel_axis=-1)
     test_ssim += ssim  # ski_ssim(output, hr_patch, data_range=1, multichannel=True)
     # PSNR
     imdf = (output - hr_patch) ** 2
