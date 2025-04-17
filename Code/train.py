@@ -34,7 +34,7 @@ torch.backends.cudnn.benchmark = False
 # JanYeh DEBUG END
 
 # --- TRAINING STABILITY PARAMETERS ---
-TOTAL_EPOCHS = 20  # 總訓練回合數
+TOTAL_EPOCHS = 40  # 總訓練回合數
 
 # --- STABILITY CONFIG ---
 STABILITY_CONFIG = {
