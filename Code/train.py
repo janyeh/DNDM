@@ -52,7 +52,7 @@ MEMORY_CONFIG = {
     'enable_cuda_benchmark': False,      # 停用CUDA基準測試以提高穩定性
     'deterministic': True,              # 啟用確定性訓練
     'enable_cudnn_benchmark': False,     # 停用cuDNN基準測試以保持一致性
-    'batch_size': 4,                    # 小批次大小以保持穩定性
+    'batch_size': 1,                    # 小批次大小以保持穩定性
     'pin_memory': True,                 # 啟用固定記憶體以加速數據傳輸
 }
 
