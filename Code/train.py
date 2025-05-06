@@ -34,7 +34,7 @@ torch.backends.cudnn.benchmark = False
 # JanYeh DEBUG END
 
 # --- TRAINING STABILITY PARAMETERS ---
-TOTAL_EPOCHS = 40  # 總訓練回合數
+TOTAL_EPOCHS = 5  # 總訓練回合數
 
 # --- STABILITY CONFIG ---
 STABILITY_CONFIG = {
@@ -52,13 +52,13 @@ MEMORY_CONFIG = {
     'enable_cuda_benchmark': False,      # 停用CUDA基準測試以提高穩定性
     'deterministic': True,              # 啟用確定性訓練
     'enable_cudnn_benchmark': False,     # 停用cuDNN基準測試以保持一致性
-    'batch_size': 1,                    # 小批次大小以保持穩定性
+    'batch_size': 4,                    # 小批次大小以保持穩定性
     'pin_memory': True,                 # 啟用固定記憶體以加速數據傳輸
 }
 
 # --- OPTIMIZER CONFIG ---
 OPTIMIZER_CONFIG = {
-    'learning_rate': 0.00001,           # 降低學習率以提高穩定性
+    'learning_rate': 0.0003,           # 降低學習率以提高穩定性
     'adam_betas': (0.5, 0.999),         # Adam優化器的beta參數
     'adam_eps': 1e-8,                   # Adam優化器的epsilon值(數值穩定性)
     'scheduler_t_max': 100,             # 餘弦退火調度器週期
@@ -304,7 +304,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
     adjust_learning_rate(optimizer_G, epoch)
 
     # Jan - debug 
-    max_debug_iterations = 10
+    #max_debug_iterations = 10
 
     # Add memory debug info
     torch.backends.cudnn.benchmark = True
