@@ -1,53 +1,51 @@
+#!/usr/bin/env python3
+"""
+Robust PSNR / SSIM evaluator
+---------------------------
+用法：
+    python psnr_ssim.py --pred ./output/C --gt ./output/A
+"""
+
+import argparse
 import os
+import sys
+from pathlib import Path
+
 import numpy as np
 from PIL import Image
-from skimage.measure import compare_psnr, compare_ssim
+from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 import natsort
-import notify as discord
 
-val_ite = 0
-psnr = 0
-ssim = 0
+# ---------- CLI ----------
+parser = argparse.ArgumentParser(description='Compute PSNR / SSIM for de-hazing results')
+parser.add_argument('--pred', required=True, help='folder with model outputs')
+parser.add_argument('--gt',   required=True, help='folder with ground-truth (clear) images')
+args = parser.parse_args()
 
+pred_dir = Path(args.pred)
+gt_dir   = Path(args.gt)
 
+if not pred_dir.is_dir() or not gt_dir.is_dir():
+    sys.exit('[ERROR] pred_dir 或 gt_dir 不是有效資料夾')
 
-ref_dir = './output/A'
-in_dir = './output/C'#/home/lyp/PycharmProjects/LIR-for-Unsupervised-IR/Val_Indoor'  #/home/lyp/3T/RESIDE/SOTS/nyuhaze500/hazy'
+# ---------- Collect file list ----------
+pred_files = natsort.natsorted([f for f in pred_dir.iterdir() if f.suffix.lower() in {'.png', '.jpg', '.jpeg'}])
+gt_files   = natsort.natsorted([gt_dir / f.name for f in pred_files])   # 依 pred 檔名對應
 
-ref_filenames = [os.path.join(ref_dir, x) for x in natsort.natsorted(os.listdir(ref_dir)) ]#for q in range(10)
-in_filenames = [os.path.join(in_dir, x) for x in natsort.natsorted(os.listdir(in_dir)) ]
+missing = [f.name for f, g in zip(pred_files, gt_files) if not g.exists()]
+if missing:
+    sys.exit(f'[ERROR] 下列 GT 檔案不存在：{missing[:5]} ...')
 
-# in_filenames = ref_filenames
+# ---------- Compute metrics ----------
+psnr_total, ssim_total = 0.0, 0.0
+for p_path, g_path in zip(pred_files, gt_files):
+    pred = np.asarray(Image.open(p_path).convert('RGB'), dtype=np.float32) / 255.0
+    gt   = np.asarray(Image.open(g_path).convert('RGB'), dtype=np.float32) / 255.0
 
-imglist = zip(in_filenames, ref_filenames)
-for i, (path_in, path_ref) in enumerate(imglist):
-    print(path_in, path_ref)
-    ref = Image.open(path_ref).convert('RGB')
-    # print(ref.type)
+    psnr_total += peak_signal_noise_ratio(gt, pred, data_range=1.0)
+    ssim_total += structural_similarity(gt, pred, channel_axis=-1, data_range=1.0)
 
-    discord.send_discord_message(f"psnr_ssim: {np.array(ref).shape}")
-
-    ref = np.array(ref) / 255.
-    # print(ref.shape)
-    #ref = ref[10:-10, 10:-10, :]
-    # ref = ref[0:10, 0:-10, :]
-    # print(ref)
-    inputs = Image.open(path_in).convert('RGB')
-
-    inputs = np.array(inputs) / 255.
-    # print(inputs.shape)
-
-    psnr += compare_psnr(ref, inputs )#,data_range=1
-    ssim += compare_ssim(ref, inputs, multichannel=True)
-    # plt.figure('ref')
-    # plt.imshow(ref, interpolation='nearest')
-    # plt.figure('out')
-    # plt.imshow(outputs, interpolation='nearest')
-    # plt.figure('in')-10:10
-    # plt.imshow(noi, interpolation='nearest')
-    # plt.show()
-    val_ite += 1
-psnr /= val_ite
-ssim /= val_ite
-print(val_ite)
-print('psnr:{}, ssim:{}'.format(psnr, ssim))
+num = len(pred_files)
+print(f'Tested {num} image pairs')
+print(f'Average PSNR : {psnr_total/num:.4f} dB')
+print(f'Average SSIM : {ssim_total/num:.4f}')
