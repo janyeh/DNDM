@@ -34,7 +34,7 @@ torch.backends.cudnn.benchmark = False
 # JanYeh DEBUG END
 
 # --- TRAINING STABILITY PARAMETERS ---
-TOTAL_EPOCHS = 5  # 總訓練回合數
+TOTAL_EPOCHS = 20  # 總訓練回合數
 
 # --- STABILITY CONFIG ---
 STABILITY_CONFIG = {
@@ -689,11 +689,12 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 test_ite += 1
             test_psnr /= (test_ite)
             test_ssim /= (test_ite)
+            learning_rate = lr_scheduler_G.get_last_lr()
             print('Valid PSNR: {:.4f}'.format(test_psnr))
             print('Valid SSIM: {:.4f}'.format(test_ssim))
             f = open('PSNR.txt', 'a')
             writer = csv.writer(f, lineterminator='\n')
-            writer.writerow([epoch, test_psnr, test_ssim])
+            writer.writerow([epoch, test_psnr, test_ssim, learning_rate])
             f.close()
             print('------------------------')
 
