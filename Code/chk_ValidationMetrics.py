@@ -1,3 +1,4 @@
+import ast
 # checkpoint 4: Validation Metrics
 # Should be printed in training log
 print('Final Validation Results:')
@@ -6,6 +7,7 @@ with open('PSNR.txt', 'r') as f:
     epoch, psnr, ssim, learning_rate = last_line.split(',')
     print(f'PSNR: {float(psnr):.2f}')
     print(f'SSIM: {float(ssim):.4f}')
+    learning_rate = ast.literal_eval(learning_rate)[0]
     print(f'Learning Rate: {float(learning_rate):.6f}')
 
 notice ="""    
