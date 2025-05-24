@@ -28,7 +28,7 @@ def load_metric_file(path: str) -> pd.DataFrame:
         print(f'[WARN] File not found: {path}', file=sys.stderr)
         return pd.DataFrame()
 
-    df = pd.read_csv(path, names=['epoch', 'psnr', 'ssim'])
+    df = pd.read_csv(path, names=['epoch', 'psnr', 'ssim', 'learning_rate'])
     # 假如同一 epoch 被寫入多次，先 groupby 取平均
     df = df.groupby('epoch', as_index=False).mean().sort_values('epoch')
     df['run'] = os.path.splitext(os.path.basename(path))[0]  # for legend
