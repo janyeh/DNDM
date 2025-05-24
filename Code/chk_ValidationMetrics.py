@@ -3,9 +3,10 @@
 print('Final Validation Results:')
 with open('PSNR.txt', 'r') as f:
     last_line = f.readlines()[-1].strip()
-    epoch, psnr, ssim = last_line.split(',')
+    epoch, psnr, ssim, learning_rate = last_line.split(',')
     print(f'PSNR: {float(psnr):.2f}')
     print(f'SSIM: {float(ssim):.4f}')
+    print(f'Learning Rate: {float(learning_rate):.6f}')
 
 notice ="""    
 Good results should show:
