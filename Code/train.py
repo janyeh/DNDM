@@ -646,22 +646,22 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 else:
                     dehaze_B = safe_ops.reshape_for_output(dehaze_B)
                 
-                try:
-                    # Clamp values to valid range
-                    real_A = torch.clamp(real_A, -1.0, 1.0)
-                    real_B = torch.clamp(real_B, -1.0, 1.0)
-                    dehaze_B = torch.clamp(dehaze_B, -1.0, 1.0)
+                # try:
+                #     # Clamp values to valid range
+                #     real_A = torch.clamp(real_A, -1.0, 1.0)
+                #     real_B = torch.clamp(real_B, -1.0, 1.0)
+                #     dehaze_B = torch.clamp(dehaze_B, -1.0, 1.0)
                     
-                    # Convert to uint8 range for saving
-                    real_A = ((real_A + 1) * 127.5).clamp(0, 255).to(torch.uint8)
-                    real_B = ((real_B + 1) * 127.5).clamp(0, 255).to(torch.uint8)
-                    dehaze_B = ((dehaze_B + 1) * 127.5).clamp(0, 255).to(torch.uint8)
+                #     # Convert to uint8 range for saving
+                #     real_A = ((real_A + 1) * 127.5).clamp(0, 255).to(torch.uint8)
+                #     real_B = ((real_B + 1) * 127.5).clamp(0, 255).to(torch.uint8)
+                #     dehaze_B = ((dehaze_B + 1) * 127.5).clamp(0, 255).to(torch.uint8)
                     
-                    vutils.save_image(real_A.float()/255.0, './results/Targets/%05d.png' % (int(i)), padding=0)
-                    vutils.save_image(real_B.float()/255.0, './results/Inputs/%05d.png' % (int(i)), padding=0)
-                    vutils.save_image(dehaze_B.float()/255.0, './results/Outputs/%05d.png' % (int(i)), padding=0)                    
-                except Exception as e:
-                    print(f"Error in saving images: str{e}\n{traceback.format_exc()}, shapes: A={real_A.shape}, B={real_B.shape}, dehaze={dehaze_B.shape}")
+                #     vutils.save_image(real_A.float()/255.0, './results/Targets/%05d.png' % (int(i)), padding=0)
+                #     vutils.save_image(real_B.float()/255.0, './results/Inputs/%05d.png' % (int(i)), padding=0)
+                #     vutils.save_image(dehaze_B.float()/255.0, './results/Outputs/%05d.png' % (int(i)), padding=0)                    
+                # except Exception as e:
+                #     print(f"Error in saving images: str{e}\n{traceback.format_exc()}, shapes: A={real_A.shape}, B={real_B.shape}, dehaze={dehaze_B.shape}")
 
                 # vutils.save_image(real_A.data, './results/Targets/%05d.png' % (int(i)), padding=0, normalize=True)  # False
                 # vutils.save_image(real_B.data, './results/Inputs/%05d.png' % (int(i)), padding=0, normalize=True)
@@ -687,12 +687,41 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 # mse = np.mean(imdf) + eps
                 # test_psnr += 10 * math.log10(1.0 / mse)
                 # ----- Validation metrics (fixed) -----
-                output   = dehaze_B.clamp(0, 1).cpu().numpy()[0].transpose(1, 2, 0)
-                hr_patch = real_A.clamp(0, 1).cpu().numpy()[0].transpose(1, 2, 0)
+                # output   = dehaze_B.clamp(0, 1).cpu().numpy()[0].transpose(1, 2, 0)
+                # hr_patch = real_A.clamp(0, 1).cpu().numpy()[0].transpose(1, 2, 0)
 
-                test_psnr += peak_signal_noise_ratio(hr_patch, output, data_range=1.0)
-                test_ssim += structural_similarity(hr_patch, output,
-                                                   channel_axis=-1, data_range=1.0)
+                # test_psnr += peak_signal_noise_ratio(hr_patch, output, data_range=1.0)
+                # test_ssim += structural_similarity(hr_patch, output,
+                #                                    channel_axis=-1, data_range=1.0)
+
+                # ---------- 1) 先算指標（float32, 0-1） ----------
+                output_f   = torch.clamp((dehaze_B + 1) / 2.0, 0, 1)  # [-1,1] → [0,1]
+                hr_patch_f = torch.clamp((real_A   + 1) / 2.0, 0, 1)
+
+                this_psnr = peak_signal_noise_ratio(
+                                hr_patch_f.cpu().numpy()[0].transpose(1,2,0),
+                                output_f  .cpu().numpy()[0].transpose(1,2,0),
+                                data_range=1.0)
+                # 跳過 inf 樣本以免平均值爆掉
+                if not math.isinf(this_psnr):
+                    test_psnr += this_psnr
+                    test_ssim += structural_similarity(
+                                    hr_patch_f.cpu().numpy()[0].transpose(1,2,0),
+                                    output_f  .cpu().numpy()[0].transpose(1,2,0),
+                                    channel_axis=-1, data_range=1.0)
+                    test_ite += 1
+
+                # ---------- 2) 再存 PNG ----------
+                try:
+                    real_A_u8    = (output_f * 255).to(torch.uint8)
+                    real_B_u8    = torch.clamp((real_B + 1) / 2.0, 0, 1) * 255
+                    dehaze_B_u8  = (output_f * 255).to(torch.uint8)
+
+                    vutils.save_image(real_A_u8.float()/255.0, './results/Targets/%05d.png' % i, padding=0)
+                    vutils.save_image(real_B_u8.float()/255.0, './results/Inputs/%05d.png'  % i, padding=0)
+                    vutils.save_image(dehaze_B_u8.float()/255.0,'./results/Outputs/%05d.png' % i, padding=0)
+                except Exception as e:
+                    print(f"Error in saving images: {e}\n{traceback.format_exc()}")
 
                 test_ite += 1
             test_psnr /= (test_ite)
