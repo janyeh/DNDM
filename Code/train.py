@@ -13,7 +13,7 @@ from datasets2 import  TrainDatasetFromFolder4,TrainDatasetFromFolder2,TestDatas
 
 from ECLoss import DCLoss
 import torch.nn.functional as F
-from skimage.metrics import structural_similarity as ski_ssim
+from skimage.metrics import structural_similarity as ski_ssim, peak_signal_noise_ratio, structural_similarity
 from CAPLOSS import *
 from GFN20 import *
 # from model11242 import *
@@ -301,7 +301,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
     
 
     ite = 0
-    adjust_learning_rate(optimizer_G, epoch)
+    #adjust_learning_rate(optimizer_G, epoch) # 改交給 scheduler 控制
 
     # Jan - debug 
     #max_debug_iterations = 10
@@ -670,22 +670,30 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 # JanYeh: Check for None before saving images END
 
                 # Calculation of SSIM and PSNR values
-                # print(output)
-                output = dehaze_B.data.cpu().numpy()[0]
-                output[output > 1] = 1
-                output[output < 0] = 0
-                output = output.transpose((1, 2, 0))
-                hr_patch = real_A.data.cpu().numpy()[0]
-                hr_patch[hr_patch > 1] = 1
-                hr_patch[hr_patch < 0] = 0
-                hr_patch = hr_patch.transpose((1, 2, 0))
-                # SSIM
-                # test_ssim += ski_ssim(output, hr_patch, data_range=1, multichannel=True)
-                test_ssim += ski_ssim(output, hr_patch, data_range=1, win_size=5, channel_axis=-1)
-                # PSNR
-                imdf = (output - hr_patch) ** 2
-                mse = np.mean(imdf) + eps
-                test_psnr += 10 * math.log10(1.0 / mse)
+                # # print(output)
+                # output = dehaze_B.data.cpu().numpy()[0]
+                # output[output > 1] = 1
+                # output[output < 0] = 0
+                # output = output.transpose((1, 2, 0))
+                # hr_patch = real_A.data.cpu().numpy()[0]
+                # hr_patch[hr_patch > 1] = 1
+                # hr_patch[hr_patch < 0] = 0
+                # hr_patch = hr_patch.transpose((1, 2, 0))
+                # # SSIM
+                # # test_ssim += ski_ssim(output, hr_patch, data_range=1, multichannel=True)
+                # test_ssim += ski_ssim(output, hr_patch, data_range=1, win_size=5, channel_axis=-1)
+                # # PSNR
+                # imdf = (output - hr_patch) ** 2
+                # mse = np.mean(imdf) + eps
+                # test_psnr += 10 * math.log10(1.0 / mse)
+                # ----- Validation metrics (fixed) -----
+                output   = dehaze_B.clamp(0, 1).cpu().numpy()[0].transpose(1, 2, 0)
+                hr_patch = real_A.clamp(0, 1).cpu().numpy()[0].transpose(1, 2, 0)
+
+                test_psnr += peak_signal_noise_ratio(hr_patch, output, data_range=1.0)
+                test_ssim += structural_similarity(hr_patch, output,
+                                                   channel_axis=-1, data_range=1.0)
+
                 test_ite += 1
             test_psnr /= (test_ite)
             test_ssim /= (test_ite)
@@ -697,5 +705,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
             writer.writerow([epoch, test_psnr, test_ssim, learning_rate])
             f.close()
             print('------------------------')
+    # ----- update lr by cosine scheduler -----
+    lr_scheduler_G.step()            
 
 ###################################
