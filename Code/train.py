@@ -61,7 +61,7 @@ OPTIMIZER_CONFIG = {
     'learning_rate': 0.0003,           # 降低學習率以提高穩定性
     'adam_betas': (0.5, 0.999),         # Adam優化器的beta參數
     'adam_eps': 1e-8,                   # Adam優化器的epsilon值(數值穩定性)
-    'scheduler_t_max': 100,             # 餘弦退火調度器週期
+    'scheduler_t_max': 30,              # 餘弦退火調度器週期
     'weight_decay': 1e-4,               # L2正則化係數
     'warmup_epochs': 2,                 # 熱身訓練期的回合數
 }
