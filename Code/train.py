@@ -5,7 +5,10 @@ import itertools
 import math
 import traceback
 import numpy as np
+import torch
+from torch.autograd import Variable
 from torch.utils.data import DataLoader
+from torch import cat
 import torchvision.utils as vutils
 from torchvision.models import vgg16
 from perceptual import LossNetwork
@@ -13,7 +16,7 @@ from datasets2 import  TrainDatasetFromFolder4,TrainDatasetFromFolder2,TestDatas
 
 from ECLoss import DCLoss
 import torch.nn.functional as F
-from skimage.metrics import structural_similarity as ski_ssim, peak_signal_noise_ratio, structural_similarity
+from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 from CAPLOSS import *
 from GFN20 import *
 # from model11242 import *
@@ -27,7 +30,8 @@ from typing import Optional, Tuple, Union
 
 # JanYeh DEBUG BEGIN
 #torch.backends.cudnn.benchmark = True
-torch.backends.cuda.max_memory_allocated = 4294967296  # 4GB limit
+# 如需限制顯存可改用 torch.cuda.set_per_process_memory_fraction()
+# torch.backends.cuda.max_memory_allocated = 4294967296  # 4GB limit
 # Use deterministic algorithms
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -58,10 +62,10 @@ MEMORY_CONFIG = {
 
 # --- OPTIMIZER CONFIG ---
 OPTIMIZER_CONFIG = {
-    'learning_rate': 0.0003,           # 降低學習率以提高穩定性
+    'learning_rate': 0.0001,           # 降低學習率以提高穩定性
     'adam_betas': (0.5, 0.999),         # Adam優化器的beta參數
     'adam_eps': 1e-8,                   # Adam優化器的epsilon值(數值穩定性)
-    'scheduler_t_max': 30,              # 餘弦退火調度器週期
+    'scheduler_t_max': 40,              # 餘弦退火調度器週期
     'weight_decay': 1e-4,               # L2正則化係數
     'warmup_epochs': 2,                 # 熱身訓練期的回合數
 }
@@ -73,8 +77,8 @@ LOSS_WEIGHTS = {
     'dehaze_loss': 10.0,                # 去霧損失權重
     'dc_loss': 0.01,                    # 暗通道損失權重
     'tv_loss': 2e-7,                    # 全變分損失權重
-    'cap_loss': 0.001,                  # CAP損失權重
-    'lab_loss': 0.0001,                 # Lab顏色空間損失權重
+    'cap_loss': 0.0001,                 # CAP損失權重
+    'lab_loss': 0.00001,                # Lab顏色空間損失權重
     'recover_loss': 1.0,                # 恢復損失權重
     'mask_loss': 1.0,                   # 遮罩損失權重
     'haze_loss': 1.0,                   # 霧化損失權重
@@ -206,8 +210,6 @@ if torch.cuda.is_available() and not opt.cuda:
     print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
 torch.autograd.set_detect_anomaly(True) # enable to detect an error
-# JanYeh: Set smaller learning rate
-opt.lr = 0.00001  # Reduced from 0.0001
 
 ###### Definition of variables ######
 # Networks
@@ -723,7 +725,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 except Exception as e:
                     print(f"Error in saving images: {e}\n{traceback.format_exc()}")
 
-                test_ite += 1
+                #test_ite += 1
             test_psnr /= (test_ite)
             test_ssim /= (test_ite)
             learning_rate = lr_scheduler_G.get_last_lr()
