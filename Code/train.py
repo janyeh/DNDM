@@ -103,8 +103,8 @@ DATA_CONFIG = {
 }
 
 def apply_training_configs():
-    # 設置記憶體和CUDA配置
-    torch.backends.cuda.max_memory_allocated = MEMORY_CONFIG['max_gpu_memory']
+    # # 設置記憶體和CUDA配置
+    # torch.backends.cuda.max_memory_allocated = MEMORY_CONFIG['max_gpu_memory']
     torch.backends.cudnn.deterministic = MEMORY_CONFIG['deterministic']
     torch.backends.cudnn.benchmark = MEMORY_CONFIG['enable_cudnn_benchmark']
     
