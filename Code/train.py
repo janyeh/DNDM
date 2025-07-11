@@ -242,7 +242,7 @@ criterion_GAN = torch.nn.MSELoss()
 criterion_cycle = torch.nn.L1Loss()
 criterion_identity = torch.nn.L1Loss()
 
-vgg_model = vgg16(pretrained=True).features[:16]
+vgg_model = vgg16(weights='IMAGENET1K_V1').features[:16]
 vgg_model = vgg_model.cuda()
 for param in vgg_model.parameters():
     param.requires_grad = False
@@ -500,17 +500,22 @@ for epoch in range(opt.epoch, opt.n_epochs):
             loss_components.append(loss_recover)            
 
 
-            y = dehaze_R
-            z = dehaze_B
-            tv_loss = (torch.sum(torch.abs(y[:, :, :, :-1] - y[:, :, :, 1:])) +
-                    torch.sum(torch.abs(y[:, :, :-1, :] - y[:, :, 1:, :])))+ \
-                    (torch.sum(torch.abs(z[:, :, :, :-1] - z[:, :, :, 1:])) +
-                    torch.sum(torch.abs(z[:, :, :-1, :] - z[:, :, 1:, :])))
+            # 註釋掉未使用的損失函數計算以避免不必要的計算和錯誤
+            # y = dehaze_R
+            # z = dehaze_B
+            # tv_loss = (torch.sum(torch.abs(y[:, :, :, :-1] - y[:, :, :, 1:])) +
+            #         torch.sum(torch.abs(y[:, :, :-1, :] - y[:, :, 1:, :])))+ \
+            #         (torch.sum(torch.abs(z[:, :, :, :-1] - z[:, :, :, 1:])) +
+            #         torch.sum(torch.abs(z[:, :, :-1, :] - z[:, :, 1:, :])))
 
             loss_DC_A = DCLoss((dehaze_R + 1) / 2, 16) + DCLoss((dehaze_B + 1) / 2, 16)  + DCLoss((dehaze_A  + 1) / 2, 16) + DCLoss((dehaze_fake_hazy_A  + 1) / 2, 16)
-            loss_CAP = CAPLoss(dehaze_R)+CAPLoss(dehaze_B) + CAPLoss(dehaze_A) + CAPLoss(dehaze_fake_hazy_A)
+            # loss_CAP = CAPLoss(dehaze_R)+CAPLoss(dehaze_B) + CAPLoss(dehaze_A) + CAPLoss(dehaze_fake_hazy_A)  # 已移除
             loss_Lab = LabLoss(dehaze_R, real_R)*0.01+LabLoss(dehaze_B,real_A)+LabLoss(dehaze_fake_hazy_A ,real_A)
             loss_Lab = loss_Lab.float()
+            
+            # 為了日誌記錄，設置未使用的損失為 0
+            tv_loss = torch.tensor(0.0, requires_grad=False).cuda()
+            loss_CAP = torch.tensor(0.0, requires_grad=False).cuda()
 
             # Scale large losses before combining
             if loss_recover > 1000:
