@@ -48,7 +48,8 @@ def safe_clamp_tuple(tuple_tensor, name="", min=-1e8, max=1e8):
     for i, tensor in enumerate(tuple_tensor):
         if tensor is not None:
             if not torch.isfinite(tensor).all():
-                print(f"Warning: Non-finite values detected in {name}[{i}]. Clamping values.")
+                # print(f"Warning: Non-finite values detected in {name}[{i}]. Clamping values.")
+                pass
             result.append(torch.clamp(tensor, min=min, max=max))
         else:
             result.append(None)
@@ -143,9 +144,9 @@ class ffa(nn.Module):
     
     def check_tensor(self, tensor, name):
         if torch.isnan(tensor).any() or torch.isinf(tensor).any():
-            print(f"NaN or Inf detected in {name}")
+            # print(f"NaN or Inf detected in {name}")
             return False
-        print(f"{name} shape: {tensor.shape}, min: {tensor.min().item()}, max: {tensor.max().item()}, mean: {tensor.mean().item()}")
+        # print(f"{name} shape: {tensor.shape}, min: {tensor.min().item()}, max: {tensor.max().item()}, mean: {tensor.mean().item()}")
         return True
     
     # def forward(self, x1, meta):
@@ -242,7 +243,7 @@ class ffa(nn.Module):
         try:
             w = safe_clamp(w.view(-1, self.gps, self.dim)[:, :, :, None, None], "view")
         except Exception as e:
-            print(f"Error in weight reshape: {e}")
+            # print(f"Error in weight reshape: {e}")
             # Force fallback: use preprocessed x and ensure 3 channels
             # fallback = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
             fallback = nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
@@ -251,7 +252,7 @@ class ffa(nn.Module):
         # Check critical tensors; if invalid, force fallback
         if not self.check_tensor(w, "weights") or not self.check_tensor(res1, "res1") or \
            not self.check_tensor(res2, "res2") or not self.check_tensor(res3, "res3"):
-            print("Warning: One of the intermediate tensors is non-finite. Forcing fallback.")
+            # print("Warning: One of the intermediate tensors is non-finite. Forcing fallback.")
             # fallback = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
             fallback = nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
             return fallback if fallback.size(1) == 3 else fallback[:, :3, :, :]
@@ -259,24 +260,24 @@ class ffa(nn.Module):
         try:
             out = safe_clamp(w[:, 0, ::]*res1 + w[:, 1, ::]*res2 + w[:, 2, ::]*res3, "weighted_sum")
             if not self.check_tensor(out, "weighted_sum"):
-                print("Warning: weighted_sum non-finite. Forcing fallback via nan_to_num.")
+                # print("Warning: weighted_sum non-finite. Forcing fallback via nan_to_num.")
                 # out = torch.nan_to_num(out, nan=0.0, posinf=1.0, neginf=-1.0)
                 out = nan_to_num(out, nan=0.0, posinf=1.0, neginf=-1.0)
             out = safe_clamp(self.palayer(out), "palayer")
             if not self.check_tensor(out, "after_palayer"):
-                print("Warning: after_palayer non-finite. Forcing fallback via nan_to_num.")
+                # print("Warning: after_palayer non-finite. Forcing fallback via nan_to_num.")
                 # out = torch.nan_to_num(out, nan=0.0, posinf=1.0, neginf=-1.0)
                 out = nan_to_num(out, nan=0.0, posinf=1.0, neginf=-1.0)
             x_out = safe_clamp(self.post(out), "post")
             if not self.check_tensor(x_out, "final_output"):
-                print("Warning: final output non-finite. Applying nan_to_num and slicing to 3 channels.")
+                # print("Warning: final output non-finite. Applying nan_to_num and slicing to 3 channels.")
                 # x_out = torch.nan_to_num(x_out, nan=0.0, posinf=1.0, neginf=-1.0)
                 x_out = nan_to_num(x_out, nan=0.0, posinf=1.0, neginf=-1.0)
                 if x_out.size(1) != 3:
                     x_out = x_out[:, :3, :, :]
             return x_out
         except Exception as e:
-            print(f"Error in forward pass of ffa: {e}")
+            # print(f"Error in forward pass of ffa: {e}")
             # fallback = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
             fallback = nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
             return fallback if fallback.size(1) == 3 else fallback[:, :3, :, :]

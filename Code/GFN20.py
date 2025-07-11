@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import math
-from torch import cat
 
 class _ResBLockDB(nn.Module):
     def __init__(self, inchannel, outchannel, stride=1):
@@ -140,12 +139,12 @@ class _Content1(nn.Module):
         con1 = self.relu(self.conv1(x))
         # Ensure input has correct channels
         if x.size(1) != 3:
-            print(f"Warning: Input to _Content1 has {x.size(1)} channels, expected 3")
+            # print(f"Warning: Input to _Content1 has {x.size(1)} channels, expected 3")
             x = x[:,:3,:,:]  # Take only first 3 channels
         res8 = self.resBlock(con1)
         con2 = self.conv2(res8)
         sr_feature = torch.add(con2, res8)  # +x
-        Content = cat([con1, res8, con2,sr_feature], 1)
+        Content = torch.cat([con1, res8, con2,sr_feature], 1)
         return sr_feature, Content
 
 
@@ -181,7 +180,7 @@ class _SRMoudle1(nn.Module):
         sr_feature = torch.add(con2, res8)  # +x
         #mask = cat([con1,  res8, con2,sr_feature ], 1)
         # JanYeh: Add clamp to prevent extreme values
-        mask = torch.clamp(cat([con1, res8, con2, sr_feature], 1), -10, 10)
+        mask = torch.clamp(torch.cat([con1, res8, con2, sr_feature], 1), -10, 10)
 
         return sr_feature, mask
 
@@ -251,7 +250,7 @@ class Net_hazy(nn.Module):
             return tuple(self.check_nan(t, f"{name}_{i}") for i, t in enumerate(tensors))
         elif isinstance(tensors, torch.Tensor):
             if torch.isnan(tensors).any():
-                print(f"NaN detected in {name}")
+                # print(f"NaN detected in {name}")
                 return torch.zeros_like(tensors)
             return tensors
         return tensors

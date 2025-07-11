@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
-from torch import cat
+import torch
 import torchvision.utils as vutils
 from torchvision.models import vgg16
 from perceptual import LossNetwork
@@ -29,12 +29,13 @@ import torch.backends.cudnn
 from typing import Optional, Tuple, Union
 
 # JanYeh DEBUG BEGIN
-#torch.backends.cudnn.benchmark = True
+# 已更新：使用 MEMORY_CONFIG 控制，改為啟用 benchmark 以提高性能
+# torch.backends.cudnn.benchmark = True  # 由 apply_training_configs() 處理
 # 如需限制顯存可改用 torch.cuda.set_per_process_memory_fraction()
 # torch.backends.cuda.max_memory_allocated = 4294967296  # 4GB limit
-# Use deterministic algorithms
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
+# Use deterministic algorithms - 已停用以提高性能
+# torch.backends.cudnn.deterministic = True  # 由 apply_training_configs() 處理
+# torch.backends.cudnn.benchmark = False     # 由 apply_training_configs() 處理
 # JanYeh DEBUG END
 
 # --- TRAINING STABILITY PARAMETERS ---
@@ -53,16 +54,16 @@ STABILITY_CONFIG = {
 # --- 記憶體管理 ---
 MEMORY_CONFIG = {
     'max_gpu_memory': 4294967296,       # GPU記憶體限制(4GB)
-    'enable_cuda_benchmark': False,      # 停用CUDA基準測試以提高穩定性
-    'deterministic': True,              # 啟用確定性訓練
-    'enable_cudnn_benchmark': False,     # 停用cuDNN基準測試以保持一致性
-    'batch_size': 1,                    # 小批次大小以保持穩定性
+    'enable_cuda_benchmark': True,       # 啟用CUDA基準測試以提高性能
+    'deterministic': False,             # 停用確定性訓練以提高速度
+    'enable_cudnn_benchmark': True,      # 啟用cuDNN基準測試以提高性能
+    'batch_size': 4,                    # 增加批次大小以提高訓練效率
     'pin_memory': True,                 # 啟用固定記憶體以加速數據傳輸
 }
 
 # --- OPTIMIZER CONFIG ---
 OPTIMIZER_CONFIG = {
-    'learning_rate': 0.0001,           # 降低學習率以提高穩定性
+    'learning_rate': 0.0002,           # 提高學習率以加速訓練
     'adam_betas': (0.5, 0.999),         # Adam優化器的beta參數
     'adam_eps': 1e-8,                   # Adam優化器的epsilon值(數值穩定性)
     'scheduler_t_max': 40,              # 餘弦退火調度器週期
@@ -98,7 +99,7 @@ MODEL_CONFIG = {
 DATA_CONFIG = {
     'crop_size': 128,                   # 訓練用圖像裁剪大小
     'normalize_range': (-1, 1),         # 輸入標準化範圍
-    'num_workers': 1,                   # 數據加載器的工作進程數
+    'num_workers': 4,                   # 增加數據加載器的工作進程數
     'pin_memory': True,                 # 啟用固定記憶體以加速傳輸
 }
 
@@ -131,7 +132,7 @@ class SafeOps:
         if tensor is None:
             return None
         if torch.isnan(tensor).any() or torch.isinf(tensor).any():
-            print(f"Warning: Non-finite values in {name}, clamping")
+            # print(f"Warning: Non-finite values in {name}, clamping")
             tensor = torch.clamp(tensor, \
                     STABILITY_CONFIG['tensor_value_clip'][0], \
                     STABILITY_CONFIG['tensor_value_clip'][1])
@@ -144,12 +145,12 @@ class SafeOps:
             
         # Check if tensor has the right number of dimensions
         if len(tensor.shape) != 4:
-            print(f"Warning: Incorrect tensor dimensions {tensor.shape}, reshaping")
+            # print(f"Warning: Incorrect tensor dimensions {tensor.shape}, reshaping")
             return torch.zeros(1, 3, 128, 128).cuda()
             
         # Ensure we have 3 channels for RGB
         if tensor.shape[1] != 3:
-            print(f"Warning: Incorrect channel count {tensor.shape[1]}, using first 3 channels")
+            # print(f"Warning: Incorrect channel count {tensor.shape[1]}, using first 3 channels")
             if tensor.shape[1] > 3:
                 tensor = tensor[:, :3, :, :]
             else:
@@ -167,11 +168,11 @@ def compute_loss_safely(loss_fn, *args, **kwargs):
     try:
         loss = loss_fn(*args, **kwargs)
         if not torch.isfinite(loss).all():
-            print(f"Non-finite loss in {get_loss_name(loss_fn)}")
+            # print(f"Non-finite loss in {get_loss_name(loss_fn)}")
             return torch.tensor(0.0, requires_grad=True).cuda()
         return loss
     except Exception as e:
-        print(f"Error in {get_loss_name(loss_fn)}: {str(e)}")
+        # print(f"Error in {get_loss_name(loss_fn)}: {str(e)}")
         return torch.tensor(0.0, requires_grad=True).cuda()
 
 def safe_clamp_tuple(tuple_tensor, name="", min=-1e8, max=1e8):
@@ -185,7 +186,8 @@ def safe_clamp_tuple(tuple_tensor, name="", min=-1e8, max=1e8):
     for i, tensor in enumerate(tuple_tensor):
         if isinstance(tensor, torch.Tensor):
             if not torch.isfinite(tensor).all():
-                print(f"Warning: Non-finite values detected in {name}[{i}]. Clamping values.")
+                # print(f"Warning: Non-finite values detected in {name}[{i}]. Clamping values.")
+                pass
             result.append(torch.clamp(tensor, \
                     STABILITY_CONFIG['tensor_value_clip'][0], \
                     STABILITY_CONFIG['tensor_value_clip'][1]))  # min=-1.0, max=1.0
@@ -197,9 +199,9 @@ def check_tensor(tensor, name):
     if tensor is None:
         return False
     if torch.isnan(tensor).any() or torch.isinf(tensor).any():
-        print(f"NaN or Inf detected in {name}")
+        # print(f"NaN or Inf detected in {name}")
         return False
-    print(f"{name} shape: {tensor.shape}, min: {tensor.min().item()}, max: {tensor.max().item()}, mean: {tensor.mean().item()}")
+    # print(f"{name} shape: {tensor.shape}, min: {tensor.min().item()}, max: {tensor.max().item()}, mean: {tensor.mean().item()}")
     return True
 
 
@@ -207,7 +209,8 @@ opt = apply_training_configs()
 print(opt)
 
 if torch.cuda.is_available() and not opt.cuda:
-    print("WARNING: You have a CUDA device, so you should probably run with --cuda")
+    # print("WARNING: You have a CUDA device, so you should probably run with --cuda")
+    pass
 
 torch.autograd.set_detect_anomaly(True) # enable to detect an error
 
@@ -259,6 +262,7 @@ dataloader1 = DataLoader(TrainDatasetFromFolder2('trainset/trainA_new', \
         crop_size=DATA_CONFIG['crop_size']),
         batch_size=MEMORY_CONFIG['batch_size'],
         shuffle=True,
+        num_workers=DATA_CONFIG['num_workers'],
         pin_memory=DATA_CONFIG['pin_memory']
         )
         #crop_size= 128), batch_size=opt.batchSize,shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
@@ -271,9 +275,12 @@ dataloader1 = DataLoader(TrainDatasetFromFolder2('trainset/trainA_new', \
 dataloader2 = DataLoader(TrainDatasetFromFolder4('trainset/DATA2/dataset2_clear',
         'trainset/DATA2/dataset2_haze',  
         'trainset/DATA2/dataset2_clearnew_128', 
-        crop_size=128), 
-        batch_size=opt.batchSize,
-        shuffle=True )  #SIDMS   /home/omnisky/volume/ITSV2/clear
+        crop_size=DATA_CONFIG['crop_size']), 
+        batch_size=MEMORY_CONFIG['batch_size'],
+        shuffle=True,
+        num_workers=DATA_CONFIG['num_workers'],
+        pin_memory=DATA_CONFIG['pin_memory']
+        )  #SIDMS   /home/omnisky/volume/ITSV2/clear
 
 
 
@@ -310,8 +317,8 @@ for epoch in range(opt.epoch, opt.n_epochs):
 
     # Add memory debug info
     torch.backends.cudnn.benchmark = True
-    print(f"Initial memory allocated: {torch.cuda.memory_allocated()} bytes")
-    print(f"Initial max memory allocated: {torch.cuda.max_memory_allocated()} bytes")
+    # print(f"Initial memory allocated: {torch.cuda.memory_allocated()} bytes")
+    # print(f"Initial max memory allocated: {torch.cuda.max_memory_allocated()} bytes")
     
     # JanYeh: Safe loss calculation
 
@@ -328,9 +335,9 @@ for epoch in range(opt.epoch, opt.n_epochs):
 
         if real_A.size(1) == 3 and real_B.size(1) == 3:
         
-            check_tensor(real_A, "real_A")
-            check_tensor(real_B, "real_B")
-            check_tensor(real_R, "real_R")
+            # check_tensor(real_A, "real_A")
+            # check_tensor(real_B, "real_B")
+            # check_tensor(real_R, "real_R")
 
             ite += 1
             optimizer_G.zero_grad()
@@ -343,20 +350,20 @@ for epoch in range(opt.epoch, opt.n_epochs):
             recover_R = safe_ops.safe_tensor_ops(net_G(content_R, haze_mask_R), "net_G(content_R, haze_mask_R)")
             recover_B = safe_ops.safe_tensor_ops(net_G(content_B, haze_mask_B), "net_G(content_B, haze_mask_B)")
 
-            meta_B = cat([con_B,mask_B],1)
-            meta_R = cat([con_R, mask_R], 1)
+            meta_B = torch.cat([con_B,mask_B],1)
+            meta_R = torch.cat([con_R, mask_R], 1)
 
             dehaze_B = safe_ops.safe_tensor_ops(net_dehaze(real_B, meta_B), "net_dehaze(real_B, meta_B)")
             dehaze_R = safe_ops.safe_tensor_ops(net_dehaze(real_R, meta_R), "net_dehaze(real_R, meta_R)")
 
             # Check tensor shapes and channels
-            print(f"dehaze_R shape before content: {dehaze_R.shape}")
+            # print(f"dehaze_R shape before content: {dehaze_R.shape}")
             # Ensure dehaze_R has correct number of channels (3) before passing to netG_content
             if dehaze_R.size(1) != 3:
-                print(f"Warning: Incorrect channel count in dehaze_R: {dehaze_R.size(1)}, reshaping...")
+                # print(f"Warning: Incorrect channel count in dehaze_R: {dehaze_R.size(1)}, reshaping...")
                 dehaze_R = dehaze_R[:,:3,:,:]
             if dehaze_B.size(1) != 3:
-                print(f"Warning: Incorrect channel count in dehaze_B: {dehaze_B.size(1)}, reshaping...")
+                # print(f"Warning: Incorrect channel count in dehaze_B: {dehaze_B.size(1)}, reshaping...")
                 dehaze_B = dehaze_B[:,:3,:,:]
 
             content_dehaze_R,con_dehaze_R = safe_clamp_tuple(netG_content(dehaze_R), "netG_content(dehaze_R)")
@@ -373,11 +380,11 @@ for epoch in range(opt.epoch, opt.n_epochs):
             content_A ,con_A= safe_clamp_tuple(netG_content(real_A), "netG_content(real_A)")
             haze_mask_A,mask_A = safe_clamp_tuple(netG_haze(real_A), "netG_haze(real_A)")
 
-            meta_A = cat([con_A, mask_A],1)
+            meta_A = torch.cat([con_A, mask_A],1)
  
             # JanYeh: Check for NaN or Inf before passing to net_G
             if not torch.isfinite(content_A).all() or not torch.isfinite(haze_mask_B).all():
-               print("NaN or Inf detected in content_A or haze_mask_B, skipping iteration")
+               # print("NaN or Inf detected in content_A or haze_mask_B, skipping iteration")
                continue
 
             dehaze_A = safe_ops.safe_tensor_ops(net_dehaze(real_A, meta_A ), "net_dehaze(real_A, meta_A )")
@@ -389,23 +396,23 @@ for epoch in range(opt.epoch, opt.n_epochs):
             #     print("NaN or Inf detected in fake_hazy_A, skipping iteration")
             #     continue
             if not torch.isfinite(fake_hazy_A).all():
-                print("NaN or Inf detected in fake_hazy_A, forcing fallback: applying nan_to_num and slicing to 3 channels")
+                # print("NaN or Inf detected in fake_hazy_A, forcing fallback: applying nan_to_num and slicing to 3 channels")
                 fake_hazy_A = torch.nan_to_num(fake_hazy_A, nan=0.0, posinf=1.0, neginf=-1.0)
                 if fake_hazy_A.size(1) != 3:
                     fake_hazy_A = fake_hazy_A[:, :3, :, :]
-            check_tensor(fake_hazy_A, "fake_hazy_A")
+            # check_tensor(fake_hazy_A, "fake_hazy_A")
 
             content_fake_hazy_A, con_fake_hazy_A  = safe_clamp_tuple(netG_content(fake_hazy_A ), "netG_content(fake_hazy_A )")
             haze_mask_fake_hazy_A,mask_fake_hazy_A = safe_clamp_tuple(netG_haze(fake_hazy_A ), "netG_haze(fake_hazy_A )")
 
-            meta_fake_hazy_A = torch.clamp(cat([con_fake_hazy_A,mask_fake_hazy_A],1), min=-1.0, max=1.0)
+            meta_fake_hazy_A = torch.clamp(torch.cat([con_fake_hazy_A,mask_fake_hazy_A],1), min=-1.0, max=1.0)
             # Jan - debug BEGIN
             if not torch.isfinite(fake_hazy_A).all() or not torch.isfinite(meta_fake_hazy_A).all():
-                print("NaN or Inf detected in fake_hazy_A or meta_fake_hazy_A, skipping iteration")
+                # print("NaN or Inf detected in fake_hazy_A or meta_fake_hazy_A, skipping iteration")
                 continue
-            if not check_tensor(fake_hazy_A, "fake_hazy_A") or not check_tensor(meta_fake_hazy_A, "meta_fake_hazy_A"):
-                print("Skipping iteration due to NaN or Inf")
-                continue
+            # if not check_tensor(fake_hazy_A, "fake_hazy_A") or not check_tensor(meta_fake_hazy_A, "meta_fake_hazy_A"):
+            #     print("Skipping iteration due to NaN or Inf")
+            #     continue
             # Jan - debug END
 
             # print(f"fake_hazy_A shape: {fake_hazy_A.shape}")
@@ -418,9 +425,9 @@ for epoch in range(opt.epoch, opt.n_epochs):
             try:
                 dehaze_fake_hazy_A = safe_ops.safe_tensor_ops(net_dehaze(fake_hazy_A, meta_fake_hazy_A ), "net_dehaze(fake_hazy_A, meta_fake_hazy_A )")
             except Exception as e:
-                print(f"Error in net_dehaze: {e}")
+                # print(f"Error in net_dehaze: {e}")
                 continue
-            check_tensor(meta_fake_hazy_A, "meta_fake_hazy_A")
+            # check_tensor(meta_fake_hazy_A, "meta_fake_hazy_A")
         
             loss_components = []
 
@@ -428,8 +435,8 @@ for epoch in range(opt.epoch, opt.n_epochs):
             loss_haze = F.smooth_l1_loss(fake_hazy_A, real_B)
             loss_components = []
             loss_haze = compute_loss_safely(F.smooth_l1_loss, fake_hazy_A, real_B)
-            if check_tensor(loss_haze, "loss_haze"):
-                loss_components.append(loss_haze)
+            # if check_tensor(loss_haze, "loss_haze"):
+            #     loss_components.append(loss_haze)
             # Add gradient clipping
             max_grad_norm = STABILITY_CONFIG['gradient_clip_norm'] # 1.0
             torch.nn.utils.clip_grad_norm_(
@@ -444,8 +451,9 @@ for epoch in range(opt.epoch, opt.n_epochs):
             # loss_haze =  F.smooth_l1_loss(fake_hazy_A , real_B)  + loss_network(fake_hazy_A , real_B) * 0.04
             loss_haze = compute_loss_safely(F.smooth_l1_loss, fake_hazy_A , real_B)  + compute_loss_safely(loss_network, fake_hazy_A , real_B) * LOSS_WEIGHTS['perceptual_loss'] #0.04
             # Jan - debug
-            if check_tensor(loss_haze, "loss_haze"):
-                loss_components.append(loss_haze)
+            # if check_tensor(loss_haze, "loss_haze"):
+            #     loss_components.append(loss_haze)
+            loss_components.append(loss_haze)
 
             # loss_dehaze = F.smooth_l1_loss(dehaze_B, real_A)  + loss_network(dehaze_B, real_A) * 0.04 \
             #               + F.smooth_l1_loss(dehaze_A, real_A)  + loss_network(dehaze_A, real_A) * 0.04 \
@@ -454,8 +462,9 @@ for epoch in range(opt.epoch, opt.n_epochs):
                             + compute_loss_safely(F.smooth_l1_loss, dehaze_A, real_A)  + compute_loss_safely(loss_network, dehaze_A, real_A) * 0.04 \
                             + compute_loss_safely(F.smooth_l1_loss, dehaze_fake_hazy_A, real_A) + compute_loss_safely(loss_network, dehaze_fake_hazy_A, real_A) * 0.04\
             # Jan - debug
-            if check_tensor(loss_dehaze, "loss_dehaze"):
-                loss_components.append(loss_dehaze)
+            # if check_tensor(loss_dehaze, "loss_dehaze"):
+            #     loss_components.append(loss_dehaze)
+            loss_components.append(loss_dehaze)
             
             # loss_content = F.smooth_l1_loss(content_A, content_B)  + F.smooth_l1_loss(content_dehaze_B, content_B) + F.smooth_l1_loss(content_dehaze_R, content_R)\
             #                 +F.smooth_l1_loss(content_fake_hazy_A ,content_A) # +F.smooth_l1_loss(content_A,content_dehaze_fake_B)\
@@ -463,15 +472,17 @@ for epoch in range(opt.epoch, opt.n_epochs):
                             + compute_loss_safely(F.smooth_l1_loss, content_dehaze_B, content_B) + compute_loss_safely(F.smooth_l1_loss, content_dehaze_R, content_R)\
                             + compute_loss_safely(F.smooth_l1_loss, content_fake_hazy_A ,content_A) # +F.smooth_l1_loss(content_A,content_dehaze_fake_B)\
             # Jan - debug
-            if check_tensor(loss_content, "loss_content"):
-                loss_components.append(loss_content)
+            # if check_tensor(loss_content, "loss_content"):
+            #     loss_components.append(loss_content)
+            loss_components.append(loss_content)
 
             #loss_mask = F.smooth_l1_loss(haze_mask_dehaze_B, haze_mask_A) + F.smooth_l1_loss(haze_mask_fake_hazy_A , haze_mask_B)#+ F.smooth_l1_loss(haze_mask_fake_hazy_A, haze_mask_A)
             loss_mask = compute_loss_safely(F.smooth_l1_loss, haze_mask_dehaze_B, haze_mask_A) \
                         + compute_loss_safely(F.smooth_l1_loss, haze_mask_fake_hazy_A, haze_mask_B)#+ F.smooth_l1_loss(haze_mask_fake_hazy_A, haze_mask_A)
             # Jan - debug
-            if check_tensor(loss_mask, "loss_mask"):
-                loss_components.append(loss_mask)
+            # if check_tensor(loss_mask, "loss_mask"):
+            #     loss_components.append(loss_mask)
+            loss_components.append(loss_mask)
 
 
             # loss_recover = F.smooth_l1_loss(recover_B, real_B) + loss_network(recover_B, real_B) * 0.04 + \
@@ -484,8 +495,9 @@ for epoch in range(opt.epoch, opt.n_epochs):
                             compute_loss_safely(F.smooth_l1_loss, recover_R, real_R) + compute_loss_safely(loss_network, recover_R, real_R) * 0.04 + \
                             compute_loss_safely(F.smooth_l1_loss, recover_dehaze_B, real_A) + compute_loss_safely(loss_network, recover_dehaze_B, real_A) * 0.04
             # Jan - debug
-            if check_tensor(loss_recover, "loss_recover"):
-                loss_components.append(loss_recover)            
+            # if check_tensor(loss_recover, "loss_recover"):
+            #     loss_components.append(loss_recover)
+            loss_components.append(loss_recover)            
 
 
             y = dehaze_R
@@ -502,24 +514,25 @@ for epoch in range(opt.epoch, opt.n_epochs):
 
             # Scale large losses before combining
             if loss_recover > 1000:
-                print(f"Scaling down large loss_recover: {loss_recover}")
+                # print(f"Scaling down large loss_recover: {loss_recover}")
                 loss_recover = torch.clamp(loss_recover, max=1000)
             # Similar checks for other large losses
 
-            # Total loss
-            # Add the remaining loss components
-            #loss_components.extend([10*loss_dehaze, 0.01 * loss_DC_A, 2*1e-7*tv_loss, 0.001 *loss_CAP, 0.0001*loss_Lab])
+            # Total loss - 簡化損失函數結構 (5組件版本)
+            # 移除 TV loss 和 CAP loss 以簡化訓練
             loss_components.extend([ \
                     LOSS_WEIGHTS['dehaze_loss'] * loss_dehaze, \
                     LOSS_WEIGHTS['dc_loss'] * loss_DC_A, \
-                    LOSS_WEIGHTS['tv_loss'] * tv_loss, \
-                    LOSS_WEIGHTS['cap_loss'] * loss_CAP, \
                     LOSS_WEIGHTS['lab_loss'] * loss_Lab \
             ])
+            # 註釋掉的損失函數組件:
+            # LOSS_WEIGHTS['tv_loss'] * tv_loss,     # 全變分損失 - 已移除
+            # LOSS_WEIGHTS['cap_loss'] * loss_CAP,   # CAP損失 - 已移除
             # Jan - debug BEGIN
             if loss_components:
                 loss_G = sum(loss_components)
-                if check_tensor(loss_G, "loss_G"):
+                # if check_tensor(loss_G, "loss_G"):
+                if torch.isfinite(loss_G).all():
 
                     # Scale down large loss values
                     if loss_G.item() > STABILITY_CONFIG['loss_scale_threshold']: # 100:
@@ -530,7 +543,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
                                 STABILITY_CONFIG['loss_scale_factor'])
                         loss_G = loss_G * scale_factor 
 
-                        print(f"Scaling loss by factor {scale_factor}")
+                        # print(f"Scaling loss by factor {scale_factor}")
                     
                     try:
                         # Do backward pass and optimization
@@ -554,15 +567,17 @@ for epoch in range(opt.epoch, opt.n_epochs):
                             if param.grad is not None:
                                 param.grad.data.clamp_(-1, 1)
                         optimizer_G.step()
-                        print("Optimization step completed")
+                        # print("Optimization step completed")
                     except Exception as e:
-                        print(f"Error in backward pass: {e}")
+                        # print(f"Error in backward pass: {e}")
                         continue
                     
                 else:
-                    print("Skipping backward pass due to invalid loss_G")
+                    # print("Skipping backward pass due to invalid loss_G")
+                    continue
             else:
-                print("No valid loss components to compute loss_G")
+                # print("No valid loss components to compute loss_G")
+                continue
             # Jan - debug END
 
             ###################################
@@ -608,10 +623,10 @@ for epoch in range(opt.epoch, opt.n_epochs):
             for i, batch in enumerate(val_data_loader):
                 # Set model input
                 if 'A' not in batch or 'B' not in batch:
-                    print(f"Warning: Incomplete batch at index {i}, skipping")
+                    # print(f"Warning: Incomplete batch at index {i}, skipping")
                     continue
                 if batch['A'] is None or batch['B'] is None:
-                    print(f"Warning: None values in batch at index {i}, skipping")
+                    # print(f"Warning: None values in batch at index {i}, skipping")
                     continue
 
                 real_A = Variable(batch['A']).cuda(0)  # clear
@@ -621,19 +636,19 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 content_B,con_B= netG_content(real_B)
                 hazy_mask_B ,mask_B= netG_haze(real_B)
 
-                meta_B = cat([con_B,mask_B],1)
+                meta_B = torch.cat([con_B,mask_B],1)
                 dehaze_B = net_dehaze(real_B, meta_B)
 
                 # JanYeh: Check for None before saving images BEGIN
                 if real_A is None:
                     real_A = torch.zeros_like(real_A)
-                    print(f"ERROR: real_A is None, set to zero. Path=" + f"{'./results/Targets/%05d.png' % (int(i))}") 
+                    # print(f"ERROR: real_A is None, set to zero. Path=" + f"{'./results/Targets/%05d.png' % (int(i))}") 
                 else:
                     real_A = safe_ops.reshape_for_output(real_A)
                     
                 if real_B is None:
                     real_B = torch.zeros_like(real_B)
-                    print(f"ERROR: real_B is None, set to zero. Path=" + f"{'./results/Inputs/%05d.png' % (int(i))}") 
+                    # print(f"ERROR: real_B is None, set to zero. Path=" + f"{'./results/Inputs/%05d.png' % (int(i))}") 
                 else:
                     real_B = safe_ops.reshape_for_output(real_B)
 
@@ -643,7 +658,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 # else:
                 #     dehaze_B = safe_ops.reshape_for_output(dehaze_B)
                 if dehaze_B is None:
-                    print(f"ERROR: dehaze_B is None, forcing fallback using zero tensor of shape {real_B.shape}")
+                    # print(f"ERROR: dehaze_B is None, forcing fallback using zero tensor of shape {real_B.shape}")
                     dehaze_B = torch.zeros_like(real_B)
                 else:
                     dehaze_B = safe_ops.reshape_for_output(dehaze_B)
@@ -723,7 +738,8 @@ for epoch in range(opt.epoch, opt.n_epochs):
                     vutils.save_image(real_B_u8.float()/255.0, './results/Inputs/%05d.png'  % i, padding=0)
                     vutils.save_image(dehaze_B_u8.float()/255.0,'./results/Outputs/%05d.png' % i, padding=0)
                 except Exception as e:
-                    print(f"Error in saving images: {e}\n{traceback.format_exc()}")
+                    # print(f"Error in saving images: {e}\n{traceback.format_exc()}")
+                    pass
 
                 #test_ite += 1
             test_psnr /= (test_ite)
