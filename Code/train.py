@@ -43,12 +43,12 @@ TOTAL_EPOCHS = 20  # 總訓練回合數
 
 # --- STABILITY CONFIG ---
 STABILITY_CONFIG = {
-    'gradient_clip_norm': 1.0,          # 梯度裁剪的最大範數值
-    'loss_scale_threshold': 100.0,      # 縮小大型損失的閾值
-    'loss_scale_factor': 0.01,          # 超過閾值時的損失縮小係數
-    'tensor_value_clip': (-1.0, 1.0),   # 張量值的安全範圍
-    'max_grad_value': 1.0,              # 梯度值裁剪的最大值
-    'enable_anomaly_detection': True,    # 啟用自動梯度異常檢測
+    'gradient_clip_norm': 2.0,          # 增加梯度裁剪範圍
+    'loss_scale_threshold': 1000.0,     # 提高損失縮放閾值 100→1000
+    'loss_scale_factor': 0.1,           # 減少縮放強度 0.01→0.1
+    'tensor_value_clip': (-2.0, 2.0),   # 增加張量值範圍 (-1,1)→(-2,2)
+    'max_grad_value': 2.0,              # 增加梯度值範圍 1.0→2.0
+    'enable_anomaly_detection': False,   # 停用異常檢測以提高速度
 }
 
 # --- 記憶體管理 ---
@@ -57,13 +57,13 @@ MEMORY_CONFIG = {
     'enable_cuda_benchmark': True,       # 啟用CUDA基準測試以提高性能
     'deterministic': False,             # 停用確定性訓練以提高速度
     'enable_cudnn_benchmark': True,      # 啟用cuDNN基準測試以提高性能
-    'batch_size': 4,                    # 增加批次大小以提高訓練效率
+    'batch_size': 8,                    # 再次增加批次大小 4→8 (提高訓練效率)
     'pin_memory': True,                 # 啟用固定記憶體以加速數據傳輸
 }
 
 # --- OPTIMIZER CONFIG ---
 OPTIMIZER_CONFIG = {
-    'learning_rate': 0.0002,           # 提高學習率以加速訓練
+    'learning_rate': 0.0003,           # 再次提高學習率 0.0002→0.0003
     'adam_betas': (0.5, 0.999),         # Adam優化器的beta參數
     'adam_eps': 1e-8,                   # Adam優化器的epsilon值(數值穩定性)
     'scheduler_t_max': 40,              # 餘弦退火調度器週期
@@ -75,8 +75,8 @@ OPTIMIZER_CONFIG = {
 LOSS_WEIGHTS = {
     'content_loss': 1.0,                # 內容損失權重
     'perceptual_loss': 0.04,            # 感知損失權重
-    'dehaze_loss': 10.0,                # 去霧損失權重
-    'dc_loss': 0.01,                    # 暗通道損失權重
+    'dehaze_loss': 1.0,                 # 降低去霧損失權重 10.0→1.0
+    'dc_loss': 0.001,                   # 降低暗通道損失權重 0.01→0.001
     'tv_loss': 2e-7,                    # 全變分損失權重
     'cap_loss': 0.0001,                 # CAP損失權重
     'lab_loss': 0.00001,                # Lab顏色空間損失權重
@@ -561,7 +561,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
                                 net_dehaze.parameters(),
                                 net_G.parameters()
                             ),
-                            max_norm=1.0
+                            max_norm=STABILITY_CONFIG['gradient_clip_norm']
                         )
                         # Check and clamp any remaining bad gradients
                         for name, param in itertools.chain(
@@ -570,7 +570,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
                             net_dehaze.named_parameters(),
                             net_G.named_parameters()):
                             if param.grad is not None:
-                                param.grad.data.clamp_(-1, 1)
+                                param.grad.data.clamp_(-STABILITY_CONFIG['max_grad_value'], STABILITY_CONFIG['max_grad_value'])
                         optimizer_G.step()
                         # print("Optimization step completed")
                     except Exception as e:
@@ -680,8 +680,8 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 #     dehaze_B = ((dehaze_B + 1) * 127.5).clamp(0, 255).to(torch.uint8)
                     
                 #     vutils.save_image(real_A.float()/255.0, './results/Targets/%05d.png' % (int(i)), padding=0)
-                #     vutils.save_image(real_B.float()/255.0, './results/Inputs/%05d.png' % (int(i)), padding=0)
-                #     vutils.save_image(dehaze_B.float()/255.0, './results/Outputs/%05d.png' % (int(i)), padding=0)                    
+                #     vutils.save_image(real_B.float()/255.0, './results/Inputs/%05d.png'  % (int(i)), padding=0)
+                #     vutils.save_image(dehaze_B.float()/255.0,'./results/Outputs/%05d.png' % (int(i)), padding=0)                    
                 # except Exception as e:
                 #     print(f"Error in saving images: str{e}\n{traceback.format_exc()}, shapes: A={real_A.shape}, B={real_B.shape}, dehaze={dehaze_B.shape}")
 
