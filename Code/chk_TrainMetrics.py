@@ -12,20 +12,59 @@ Clean & compact training-curve visualiser.
 import os
 import sys
 from typing import List
+from datetime import datetime
+import logging
 
-import pandas as pd
-import matplotlib.pyplot as plt
+import pandas as pd  # pylint: disable=import-error
+import matplotlib.pyplot as plt  # pylint: disable=import-error
 
-# ---------- CONFIG ----------
+# ---------- LOGGING & CONFIG ----------
 LOG_FILES: List[str] = ['PSNR.txt']          # 可以放多個檔案比對
 ROLLING_WINDOW: int = 3                      # 移動平均視窗大小
-OUT_FIGURE: str = 'train_metrics.png'
-# ----------------------------
+OUT_FIGURE_NAME: str = 'train_metrics.png'
+
+
+def ensure_log_dir() -> str:
+    date_tag = datetime.now().strftime('%y-%m-%d')
+    log_dir = f'log{date_tag}'
+    os.makedirs(log_dir, exist_ok=True)
+    return log_dir
+
+
+def setup_logger(log_dir: str, log_filename: str) -> logging.Logger:
+    logger = logging.getLogger('chk_TrainMetrics')
+    logger.setLevel(logging.INFO)
+    if not logger.handlers:
+        formatter = logging.Formatter('[%(asctime)s] %(levelname)s - %(message)s',
+                                      datefmt='%Y-%m-%d %H:%M:%S')
+        fh = logging.FileHandler(os.path.join(log_dir, log_filename), encoding='utf-8')
+        fh.setLevel(logging.INFO)
+        fh.setFormatter(formatter)
+        ch = logging.StreamHandler(sys.stdout)
+        ch.setLevel(logging.INFO)
+        ch.setFormatter(formatter)
+        logger.addHandler(fh)
+        logger.addHandler(ch)
+    return logger
+
+
+LOG_DIR = ensure_log_dir()
+LOGGER = setup_logger(LOG_DIR, 'chk_TrainMetrics.log')
+
+
+def log_and_print(message: str, level: str = 'info') -> None:
+    if level == 'error':
+        LOGGER.error(message)
+    elif level == 'warning':
+        LOGGER.warning(message)
+    else:
+        LOGGER.info(message)
+    # print duplicated by console handler
 
 def load_metric_file(path: str) -> pd.DataFrame:
     """Read single txt/csv, add column 'run' for legend, aggregate duplicates."""
     if not os.path.isfile(path):
-        print(f'[WARN] File not found: {path}', file=sys.stderr)
+        log_and_print(f'[WARN] File not found: {path}', level='warning')
         return pd.DataFrame()
 
     df = pd.read_csv(path, names=['epoch', 'psnr', 'ssim', 'learning_rate'])
@@ -37,7 +76,7 @@ def load_metric_file(path: str) -> pd.DataFrame:
 def plot_metrics(dfs: List[pd.DataFrame]) -> None:
     """Plot PSNR & SSIM curves with rolling mean."""
     if not dfs:
-        print('[ERROR] No data to plot.')
+        log_and_print('[ERROR] No data to plot.', level='error')
         return
 
     plt.figure(figsize=(12, 5))
@@ -76,8 +115,9 @@ def plot_metrics(dfs: List[pd.DataFrame]) -> None:
     ax2.legend(fontsize='small')
 
     plt.tight_layout()
-    plt.savefig(OUT_FIGURE, dpi=300)
-    print(f'[INFO] Figure saved to {OUT_FIGURE}')
+    out_path = os.path.join(LOG_DIR, OUT_FIGURE_NAME)
+    plt.savefig(out_path, dpi=300)
+    log_and_print(f'[INFO] Figure saved to {out_path}')
     plt.show()
 
 def main():
