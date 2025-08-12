@@ -7,10 +7,13 @@ import matplotlib.pyplot as plt  # pylint: disable=import-error
 
 
 def ensure_log_dir() -> str:
+    code_dir = os.path.dirname(os.path.abspath(__file__))
+    base_log_dir = os.path.join(code_dir, 'Log')
+    os.makedirs(base_log_dir, exist_ok=True)
     date_tag = datetime.now().strftime('%y-%m-%d')
-    log_dir = f'log{date_tag}'
-    os.makedirs(log_dir, exist_ok=True)
-    return log_dir
+    dated_dir = os.path.join(base_log_dir, date_tag)
+    os.makedirs(dated_dir, exist_ok=True)
+    return dated_dir
 
 
 def setup_logger(log_dir: str, log_filename: str) -> logging.Logger:
