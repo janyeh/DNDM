@@ -6,17 +6,19 @@ import math
 import traceback
 import numpy as np
 import torch
+import torch.nn as nn
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 import torch
 import torchvision.utils as vutils
 from torchvision.models import vgg16
 from perceptual import LossNetwork
+from ssim import MS_SSIM_Loss
 from datasets2 import  TrainDatasetFromFolder4,TrainDatasetFromFolder2,TestDatasetFromFolder1
 
 from ECLoss import DCLoss
 import torch.nn.functional as F
-from skimage.metrics import peak_signal_noise_ratio, structural_similarity
+from pytorch_msssim import MS_SSIM
 from CAPLOSS import *
 from GFN20 import *
 # from model11242 import *
@@ -39,7 +41,7 @@ from typing import Optional, Tuple, Union
 # JanYeh DEBUG END
 
 # --- TRAINING STABILITY PARAMETERS ---
-TOTAL_EPOCHS = 20  # 總訓練回合數
+TOTAL_EPOCHS = 120  # 總訓練回合數（延長以避免早停並提升SSIM）
 
 # --- STABILITY CONFIG ---
 STABILITY_CONFIG = {
@@ -63,28 +65,28 @@ MEMORY_CONFIG = {
 
 # --- OPTIMIZER CONFIG ---
 OPTIMIZER_CONFIG = {
-    'learning_rate': 0.0003,           # 再次提高學習率 0.0002→0.0003
+    'learning_rate': 2e-4,              # 穩定起點 lr
     'adam_betas': (0.5, 0.999),         # Adam優化器的beta參數
     'adam_eps': 1e-8,                   # Adam優化器的epsilon值(數值穩定性)
-    'scheduler_t_max': 40,              # 餘弦退火調度器週期
-    'weight_decay': 1e-4,               # L2正則化係數
-    'warmup_epochs': 2,                 # 熱身訓練期的回合數
+    'scheduler_t_max': TOTAL_EPOCHS,    # 餘弦退火調度器週期（覆蓋為總epochs）
+    'eta_min': 1e-6,                    # 餘弦退火最小lr，避免lr降為0
+    'weight_decay': 1e-6,               # 較小L2正則以保留細節
+    'warmup_epochs': 5,                 # 熱身訓練期的回合數
 }
 
 # --- LOSS WEIGHTS ---
 LOSS_WEIGHTS = {
     'content_loss': 1.0,                # 內容損失權重
-    'perceptual_loss': 0.04,            # 感知損失權重
-    'dehaze_loss': 1.0,                 # 降低去霧損失權重 10.0→1.0
-    'dc_loss': 0.001,                   # 降低暗通道損失權重 0.01→0.001
-    'tv_loss': 2e-7,                    # 全變分損失權重
-    'cap_loss': 0.0001,                 # CAP損失權重
-    'lab_loss': 0.00001,                # Lab顏色空間損失權重
+    'perceptual_loss': 0.07,            # 感知損失權重（提升結構/紋理）
+    'dehaze_loss': 1.0,                 # 去霧損失權重
+    'dc_loss': 0.02,                    # 暗通道損失（降低相對權重）
+    'tv_loss': 2e-6,                    # 輕量TV抑噪
+    'cap_loss': 0.0,                    # CAP不納入總損失（僅紀錄）
+    'lab_loss': 0.05,                   # Lab色彩損失（溫和）
     'recover_loss': 1.0,                # 恢復損失權重
     'mask_loss': 1.0,                   # 遮罩損失權重
     'haze_loss': 1.0,                   # 霧化損失權重
-    'cycle_loss': 1.0,                  # 循環一致性損失權重
-    'identity_loss': 1.0,               # 身份損失權重
+    'msssim_loss': 0.2,                 # 多尺度SSIM損失權重
 }
 
 # --- MODEL ARCHITECTURE PARAMETERS ---
@@ -249,6 +251,7 @@ for param in vgg_model.parameters():
 
 loss_network = LossNetwork(vgg_model).cuda()
 loss_network.eval()
+ms_ssim_module = MS_SSIM_Loss(data_range=1.0, size_average=True, channel=3).cuda()
 
 
 optimizer_G= torch.optim.Adam(itertools.chain(netG_content.parameters() ,net_dehaze.parameters(),netG_haze.parameters(),net_G.parameters()), \
@@ -256,7 +259,11 @@ optimizer_G= torch.optim.Adam(itertools.chain(netG_content.parameters() ,net_deh
         weight_decay=OPTIMIZER_CONFIG['weight_decay'])
         #lr=opt.lr, betas=(0.5, 0.999), eps=1e-8)
 
-lr_scheduler_G = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_G, T_max=OPTIMIZER_CONFIG['scheduler_t_max']) # torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_G, T_max=100)
+lr_scheduler_G = torch.optim.lr_scheduler.CosineAnnealingLR(
+    optimizer_G,
+    T_max=OPTIMIZER_CONFIG['scheduler_t_max'],
+    eta_min=OPTIMIZER_CONFIG['eta_min']
+)  # 避免學習率降為0
 dataloader1 = DataLoader(TrainDatasetFromFolder2('trainset/trainA_new', \
         'trainset/trainB_new',  'trainset/trainB_newsize_128', \
         crop_size=DATA_CONFIG['crop_size']),
@@ -290,6 +297,13 @@ val_data_loader = DataLoader(TestDatasetFromFolder1('testdataset'), \
 
 logger1 = Logger(opt.n_epochs, len(dataloader1))
 logger2 = Logger(opt.n_epochs, len(dataloader2))
+
+# 追蹤最佳驗證指標
+best_metrics = {
+    'psnr': -1.0,
+    'ssim': -1.0,
+    'epoch': -1,
+}
 ###################################
 if not os.path.exists('output'):
     os.makedirs('output')
@@ -300,6 +314,12 @@ if not os.path.exists('./results'):
 ###### Training ######
 safe_ops = SafeOps()
 for epoch in range(opt.epoch, opt.n_epochs):
+
+    # warmup learning rate（前若干個epochs線性升溫）
+    if epoch < OPTIMIZER_CONFIG['warmup_epochs']:
+        warmup_lr = OPTIMIZER_CONFIG['learning_rate'] * float(epoch + 1) / float(OPTIMIZER_CONFIG['warmup_epochs'])
+        for param_group in optimizer_G.param_groups:
+            param_group['lr'] = warmup_lr
 
     if not epoch%2 :
         dataloader = dataloader1
@@ -449,7 +469,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
             # JanYeh: End of safe loss calculations
 
             # loss_haze =  F.smooth_l1_loss(fake_hazy_A , real_B)  + loss_network(fake_hazy_A , real_B) * 0.04
-            loss_haze = compute_loss_safely(F.smooth_l1_loss, fake_hazy_A , real_B)  + compute_loss_safely(loss_network, fake_hazy_A , real_B) * LOSS_WEIGHTS['perceptual_loss'] #0.04
+            loss_haze = compute_loss_safely(F.smooth_l1_loss, fake_hazy_A , real_B)  + compute_loss_safely(loss_network, fake_hazy_A , real_B) * LOSS_WEIGHTS['perceptual_loss']
             # Jan - debug
             # if check_tensor(loss_haze, "loss_haze"):
             #     loss_components.append(loss_haze)
@@ -458,9 +478,9 @@ for epoch in range(opt.epoch, opt.n_epochs):
             # loss_dehaze = F.smooth_l1_loss(dehaze_B, real_A)  + loss_network(dehaze_B, real_A) * 0.04 \
             #               + F.smooth_l1_loss(dehaze_A, real_A)  + loss_network(dehaze_A, real_A) * 0.04 \
             #                + F.smooth_l1_loss( dehaze_fake_hazy_A, real_A) + loss_network( dehaze_fake_hazy_A, real_A) * 0.04\
-            loss_dehaze = compute_loss_safely(F.smooth_l1_loss, dehaze_B, real_A)  + compute_loss_safely(loss_network, dehaze_B, real_A) * 0.04 \
-                            + compute_loss_safely(F.smooth_l1_loss, dehaze_A, real_A)  + compute_loss_safely(loss_network, dehaze_A, real_A) * 0.04 \
-                            + compute_loss_safely(F.smooth_l1_loss, dehaze_fake_hazy_A, real_A) + compute_loss_safely(loss_network, dehaze_fake_hazy_A, real_A) * 0.04\
+            loss_dehaze = compute_loss_safely(F.smooth_l1_loss, dehaze_B, real_A)  + compute_loss_safely(loss_network, dehaze_B, real_A) * LOSS_WEIGHTS['perceptual_loss'] \
+                            + compute_loss_safely(F.smooth_l1_loss, dehaze_A, real_A)  + compute_loss_safely(loss_network, dehaze_A, real_A) * LOSS_WEIGHTS['perceptual_loss'] \
+                            + compute_loss_safely(F.smooth_l1_loss, dehaze_fake_hazy_A, real_A) + compute_loss_safely(loss_network, dehaze_fake_hazy_A, real_A) * LOSS_WEIGHTS['perceptual_loss']\
             # Jan - debug
             # if check_tensor(loss_dehaze, "loss_dehaze"):
             #     loss_components.append(loss_dehaze)
@@ -500,21 +520,18 @@ for epoch in range(opt.epoch, opt.n_epochs):
             loss_components.append(loss_recover)            
 
 
-            # 註釋掉未使用的損失函數計算以避免不必要的計算和錯誤
-            # y = dehaze_R
-            # z = dehaze_B
-            # tv_loss = (torch.sum(torch.abs(y[:, :, :, :-1] - y[:, :, :, 1:])) +
-            #         torch.sum(torch.abs(y[:, :, :-1, :] - y[:, :, 1:, :])))+ \
-            #         (torch.sum(torch.abs(z[:, :, :, :-1] - z[:, :, :, 1:])) +
-            #         torch.sum(torch.abs(z[:, :, :-1, :] - z[:, :, 1:, :])))
+            # TV loss（輕量）
+            def tv_loss_fn(x):
+                return (torch.sum(torch.abs(x[:, :, :, :-1] - x[:, :, :, 1:])) +
+                        torch.sum(torch.abs(x[:, :, :-1, :] - x[:, :, 1:, :]))) / (x.numel() + 1e-8)
 
             loss_DC_A = DCLoss((dehaze_R + 1) / 2, 16) + DCLoss((dehaze_B + 1) / 2, 16)  + DCLoss((dehaze_A  + 1) / 2, 16) + DCLoss((dehaze_fake_hazy_A  + 1) / 2, 16)
             # loss_CAP = CAPLoss(dehaze_R)+CAPLoss(dehaze_B) + CAPLoss(dehaze_A) + CAPLoss(dehaze_fake_hazy_A)  # 已移除
             loss_Lab = LabLoss(dehaze_R, real_R)*0.01+LabLoss(dehaze_B,real_A)+LabLoss(dehaze_fake_hazy_A ,real_A)
             loss_Lab = loss_Lab.float()
             
-            # 為了日誌記錄，設置未使用的損失為 0
-            tv_loss = torch.tensor(0.0, requires_grad=False).cuda()
+            # 設置TV損失（啟用小權重）
+            tv_loss = (tv_loss_fn(dehaze_R) + tv_loss_fn(dehaze_B)) * 0.5
             loss_CAP = torch.tensor(0.0, requires_grad=False).cuda()
 
             # Scale large losses before combining
@@ -523,16 +540,22 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 loss_recover = torch.clamp(loss_recover, max=1000)
             # Similar checks for other large losses
 
-            # Total loss - 簡化損失函數結構 (5組件版本)
-            # 移除 TV loss 和 CAP loss 以簡化訓練
-            loss_components.extend([ \
-                    LOSS_WEIGHTS['dehaze_loss'] * loss_dehaze, \
-                    LOSS_WEIGHTS['dc_loss'] * loss_DC_A, \
-                    LOSS_WEIGHTS['lab_loss'] * loss_Lab \
+            # MS-SSIM 損失（基於0-1範圍）
+            dehaze_B_01 = torch.clamp((dehaze_B + 1) / 2.0, 0, 1)
+            real_A_01   = torch.clamp((real_A   + 1) / 2.0, 0, 1)
+            # 轉換為 [0,1] 的 1 - MSSSIM 作為正損失
+            msssim_loss = 1.0 + ms_ssim_module(dehaze_B_01, real_A_01)
+
+            # Total loss 組合
+            loss_components.extend([
+                    LOSS_WEIGHTS['dehaze_loss'] * loss_dehaze,
+                    LOSS_WEIGHTS['dc_loss'] * loss_DC_A,
+                    LOSS_WEIGHTS['lab_loss'] * loss_Lab,
+                    LOSS_WEIGHTS['tv_loss'] * tv_loss,
+                    LOSS_WEIGHTS['msssim_loss'] * msssim_loss
             ])
             # 註釋掉的損失函數組件:
-            # LOSS_WEIGHTS['tv_loss'] * tv_loss,     # 全變分損失 - 已移除
-            # LOSS_WEIGHTS['cap_loss'] * loss_CAP,   # CAP損失 - 已移除
+            # LOSS_WEIGHTS['cap_loss'] * loss_CAP,   # CAP損失 - 保留為0以便日誌
             # Jan - debug BEGIN
             if loss_components:
                 loss_G = sum(loss_components)
@@ -609,7 +632,8 @@ for epoch in range(opt.epoch, opt.n_epochs):
 
     # Update learning rates
 
-    lr_scheduler_G.step()
+    if epoch >= OPTIMIZER_CONFIG['warmup_epochs']:
+        lr_scheduler_G.step()
 
 
     torch.save(netG_content.state_dict(), 'output/netG_content_%d.pth' % int(epoch+1))
@@ -620,8 +644,8 @@ for epoch in range(opt.epoch, opt.n_epochs):
     if epoch % 1 == 0:
         with torch.no_grad():
             print('------------------------')
-            test_psnr = 0
-            test_ssim = 0
+            test_psnr = 0.0
+            test_ssim = 0.0
             eps = 1e-10
             test_ite = 0
             # for image_name,input, target in enumerate(self.val_loader):
@@ -716,21 +740,17 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 # test_ssim += structural_similarity(hr_patch, output,
                 #                                    channel_axis=-1, data_range=1.0)
 
-                # ---------- 1) 先算指標（float32, 0-1） ----------
+                # ---------- 1) 先算指標（torch, 0-1） ----------
                 output_f   = torch.clamp((dehaze_B + 1) / 2.0, 0, 1)  # [-1,1] → [0,1]
                 hr_patch_f = torch.clamp((real_A   + 1) / 2.0, 0, 1)
 
-                this_psnr = peak_signal_noise_ratio(
-                                hr_patch_f.cpu().numpy()[0].transpose(1,2,0),
-                                output_f  .cpu().numpy()[0].transpose(1,2,0),
-                                data_range=1.0)
-                # 跳過 inf 樣本以免平均值爆掉
-                if not math.isinf(this_psnr):
-                    test_psnr += this_psnr
-                    test_ssim += structural_similarity(
-                                    hr_patch_f.cpu().numpy()[0].transpose(1,2,0),
-                                    output_f  .cpu().numpy()[0].transpose(1,2,0),
-                                    channel_axis=-1, data_range=1.0)
+                mse = torch.mean((output_f - hr_patch_f) ** 2)
+                this_psnr = 10.0 * torch.log10(torch.tensor(1.0, device=output_f.device) / (mse + 1e-10))
+                if torch.isfinite(this_psnr):
+                    test_psnr += this_psnr.item()
+                    # 使用 MS-SSIM 作為驗證 SSIM
+                    ms_ssim_metric = MS_SSIM(data_range=1.0, size_average=True, channel=3).cuda()
+                    test_ssim += ms_ssim_metric(hr_patch_f, output_f).item()
                     test_ite += 1
 
                 # ---------- 2) 再存 PNG ----------
@@ -747,17 +767,36 @@ for epoch in range(opt.epoch, opt.n_epochs):
                     pass
 
                 #test_ite += 1
-            test_psnr /= (test_ite)
-            test_ssim /= (test_ite)
+            test_psnr /= max(test_ite, 1)
+            test_ssim /= max(test_ite, 1)
             learning_rate = lr_scheduler_G.get_last_lr()
             print('Valid PSNR: {:.4f}'.format(test_psnr))
             print('Valid SSIM: {:.4f}'.format(test_ssim))
+
+            # 保存最佳SSIM/PSNR檢查點
+            improved = False
+            if test_ssim > best_metrics['ssim'] + 1e-6:
+                best_metrics.update({'ssim': test_ssim, 'psnr': test_psnr, 'epoch': epoch})
+                torch.save(netG_content.state_dict(), 'output/best_netG_content.pth')
+                torch.save(netG_haze.state_dict(), 'output/best_netG_haze.pth')
+                torch.save(net_dehaze.state_dict(), 'output/best_net_dehaze.pth')
+                torch.save(net_G.state_dict(), 'output/best_net_G.pth')
+                improved = True
+            elif abs(test_ssim - best_metrics['ssim']) < 1e-6 and test_psnr > best_metrics['psnr'] + 1e-6:
+                best_metrics.update({'psnr': test_psnr, 'epoch': epoch})
+                torch.save(netG_content.state_dict(), 'output/best_netG_content.pth')
+                torch.save(netG_haze.state_dict(), 'output/best_netG_haze.pth')
+                torch.save(net_dehaze.state_dict(), 'output/best_net_dehaze.pth')
+                torch.save(net_G.state_dict(), 'output/best_net_G.pth')
+                improved = True
+            if improved:
+                print(f"[Best] epoch={epoch} SSIM={best_metrics['ssim']:.4f} PSNR={best_metrics['psnr']:.4f}")
             f = open('PSNR.txt', 'a')
             writer = csv.writer(f, lineterminator='\n')
             writer.writerow([epoch, test_psnr, test_ssim, learning_rate])
             f.close()
             print('------------------------')
     # ----- update lr by cosine scheduler -----
-    lr_scheduler_G.step()            
+    # 已在每epoch結尾step一次，不需重複
 
 ###################################

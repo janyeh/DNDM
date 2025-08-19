@@ -334,3 +334,57 @@
 **文件結束**
 
 *此文件記錄了 DNDM 模型從初始基準到第一階段優化完成的完整歷史。下一階段將專注於模型性能的進一步提升。* 
+
+---
+
+## 變更記錄 #005 - 提升 SSIM 與學習率排程優化
+**日期**: 2025-08-12  
+**變更類型**: 配置優化 + 損失設計  
+**優先級**: 高  
+**狀態**: 已完成  
+
+### 背景
+上一輪訓練最終指標 PSNR=21.94、SSIM=0.579，顯示結構相似性偏低，且學習率在後段衰減至 0 造成學習停滯；同時 `loss_DC_A`、`loss_Lab` 相對偏大，抑制了細節與結構學習。
+
+### 變更內容
+- **延長訓練**: `TOTAL_EPOCHS` 20 → 120（避免早停，爭取更高 SSIM）
+- **學習率策略**:
+  - `CosineAnnealingLR` 加入 `eta_min=1e-6`，避免 LR 掉為 0
+  - `T_max=TOTAL_EPOCHS`，與總 epochs 對齊
+  - 新增 `warmup_epochs=5`，前 5 個 epoch 線性升溫
+  - `learning_rate=2e-4`、`weight_decay=1e-6`
+- **損失權重重平衡**:
+  - `perceptual_loss` 0.04 → 0.07（加強紋理/結構）
+  - 新增 `MS-SSIM` 損失，權重 `msssim_loss=0.2`
+  - `dc_loss` 降至 0.02、`lab_loss` 設為 0.05（避免對比/色彩過強）
+  - 啟用輕量 `tv_loss=2e-6`
+  - `CAP` 仍不納入總損失（僅日誌）
+- **最佳模型保存**:
+  - 以驗證集 SSIM 為主、PSNR 為次保存 `output/best_*.pth`
+- **指標計算**:
+  - 驗證階段採用 torch 計算 PSNR，並以 `MS-SSIM` 作為 SSIM 指標
+- **套件**:
+  - 新增 `pytorch-msssim==0.2.1` 到 `Code/pip-req.txt`
+
+### 相關文件
+- `Code/train.py`
+  - 調整 `TOTAL_EPOCHS`、`OPTIMIZER_CONFIG`、`LOSS_WEIGHTS`
+  - 加入 warmup、`eta_min`、`MS-SSIM`、輕量 TV loss
+  - 新增最佳模型保存邏輯
+- `Code/pip-req.txt`
+  - 新增 `pytorch-msssim` 依賴
+
+### 預期效果
+- **SSIM 明顯提升**（目標 ≥ 0.70）
+- **PSNR 穩中有升**（目標 23–25 dB）
+- **後期不再停學**（LR 不會趨近 0）
+- 視覺上更清晰的邊緣與結構
+
+### 實際效果 (待驗證)
+> - [ ] 訓練 120 epochs 之最佳驗證 SSIM/PSNR
+> - [ ] 曲線監控：LR、loss 組件、PSNR/SSIM
+> - [ ] 視覺對比：固定驗證樣本（每 5–10 epochs）
+
+### 備註
+- GPU 訓練需先安裝新依賴：`pip install -r Code/pip-req.txt`
+- 若顯存吃緊，可將 `batch_size` 調至 4 並啟用梯度累積（待後續加入）
