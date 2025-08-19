@@ -86,7 +86,7 @@ LOSS_WEIGHTS = {
     'recover_loss': 1.0,                # 恢復損失權重
     'mask_loss': 1.0,                   # 遮罩損失權重
     'haze_loss': 1.0,                   # 霧化損失權重
-    'msssim_loss': 0.2,                 # 多尺度SSIM損失權重
+    'msssim_loss': 0.05,                # 多尺度SSIM損失權重（降低以提高穩定性）
 }
 
 # --- MODEL ARCHITECTURE PARAMETERS ---
@@ -169,10 +169,24 @@ def get_loss_name(loss_fn):
 
 def compute_loss_safely(loss_fn, *args, **kwargs):
     try:
+        # 檢查輸入參數是否有效
+        for arg in args:
+            if isinstance(arg, torch.Tensor):
+                if torch.isnan(arg).any() or torch.isinf(arg).any():
+                    # print(f"Invalid input detected for {get_loss_name(loss_fn)}")
+                    return torch.tensor(0.0, requires_grad=True).cuda()
+        
         loss = loss_fn(*args, **kwargs)
+        
+        # 檢查損失值是否有效
         if not torch.isfinite(loss).all():
             # print(f"Non-finite loss in {get_loss_name(loss_fn)}")
             return torch.tensor(0.0, requires_grad=True).cuda()
+            
+        # 對於 MS-SSIM 類型的損失，額外裁剪極值
+        if 'ssim' in get_loss_name(loss_fn).lower():
+            loss = torch.clamp(loss, -10.0, 10.0)  # 避免極端值
+            
         return loss
     except Exception as e:
         # print(f"Error in {get_loss_name(loss_fn)}: {str(e)}")
@@ -541,11 +555,13 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 loss_recover = torch.clamp(loss_recover, max=1000)
             # Similar checks for other large losses
 
-            # MS-SSIM 損失（基於0-1範圍）
-            dehaze_B_01 = torch.clamp((dehaze_B + 1) / 2.0, 0, 1)
-            real_A_01   = torch.clamp((real_A   + 1) / 2.0, 0, 1)
-            # 轉換為 [0,1] 的 1 - MSSSIM 作為正損失
-            msssim_loss = 1.0 + ms_ssim_module(dehaze_B_01, real_A_01)
+            # MS-SSIM 損失（基於0-1範圍，使用安全計算）
+            dehaze_B_01 = torch.clamp((dehaze_B + 1) / 2.0, 0.01, 0.99)  # 避免極值
+            real_A_01   = torch.clamp((real_A   + 1) / 2.0, 0.01, 0.99)   # 避免極值
+            
+            # 使用安全的 MS-SSIM 計算
+            msssim_loss = compute_loss_safely(ms_ssim_module, dehaze_B_01, real_A_01)
+            msssim_loss = 1.0 + msssim_loss  # 轉換為正損失
 
             # Total loss 組合
             loss_components.extend([
@@ -742,16 +758,23 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 #                                    channel_axis=-1, data_range=1.0)
 
                 # ---------- 1) 先算指標（torch, 0-1） ----------
-                output_f   = torch.clamp((dehaze_B + 1) / 2.0, 0, 1)  # [-1,1] → [0,1]
-                hr_patch_f = torch.clamp((real_A   + 1) / 2.0, 0, 1)
+                output_f   = torch.clamp((dehaze_B + 1) / 2.0, 0.01, 0.99)  # [-1,1] → [0,1]，避免極值
+                hr_patch_f = torch.clamp((real_A   + 1) / 2.0, 0.01, 0.99)
 
                 mse = torch.mean((output_f - hr_patch_f) ** 2)
                 this_psnr = 10.0 * torch.log10(torch.tensor(1.0, device=output_f.device) / (mse + 1e-10))
                 if torch.isfinite(this_psnr):
                     test_psnr += this_psnr.item()
-                    # 使用 MS-SSIM 作為驗證 SSIM
-                    ms_ssim_metric = MS_SSIM(data_range=1.0, size_average=True, channel=3).cuda()
-                    test_ssim += ms_ssim_metric(hr_patch_f, output_f).item()
+                    # 使用 MS-SSIM 作為驗證 SSIM（安全計算）
+                    try:
+                        ms_ssim_metric = MS_SSIM(data_range=1.0, size_average=True, channel=3).cuda()
+                        ssim_value = ms_ssim_metric(hr_patch_f, output_f)
+                        if torch.isfinite(ssim_value):
+                            test_ssim += ssim_value.item()
+                        else:
+                            test_ssim += 0.0  # 如果 SSIM 無效，使用 0
+                    except Exception as e:
+                        test_ssim += 0.0  # 如果計算失敗，使用 0
                     test_ite += 1
 
                 # ---------- 2) 再存 PNG ----------
