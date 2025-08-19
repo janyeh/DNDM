@@ -59,7 +59,7 @@ MEMORY_CONFIG = {
     'enable_cuda_benchmark': True,       # 啟用CUDA基準測試以提高性能
     'deterministic': False,             # 停用確定性訓練以提高速度
     'enable_cudnn_benchmark': True,      # 啟用cuDNN基準測試以提高性能
-    'batch_size': 8,                    # 再次增加批次大小 4→8 (提高訓練效率)
+    'batch_size': 4,                    # 減少批次大小 8→4 (因圖像尺寸增加到224)
     'pin_memory': True,                 # 啟用固定記憶體以加速數據傳輸
 }
 
@@ -99,7 +99,7 @@ MODEL_CONFIG = {
 
 # --- DATA PROCESSING PARAMETERS ---
 DATA_CONFIG = {
-    'crop_size': 128,                   # 訓練用圖像裁剪大小
+    'crop_size': 224,                   # 訓練用圖像裁剪大小 (增加到224以滿足MS-SSIM需求，至少需要161)
     'normalize_range': (-1, 1),         # 輸入標準化範圍
     'num_workers': 4,                   # 增加數據加載器的工作進程數
     'pin_memory': True,                 # 啟用固定記憶體以加速傳輸
@@ -142,13 +142,14 @@ class SafeOps:
 
     def reshape_for_output(self, tensor):
         """Ensure tensor is in correct shape for image output"""
+        crop_size = DATA_CONFIG['crop_size']
         if tensor is None:
-            return torch.zeros(1, 3, 128, 128).cuda()
+            return torch.zeros(1, 3, crop_size, crop_size).cuda()
             
         # Check if tensor has the right number of dimensions
         if len(tensor.shape) != 4:
             # print(f"Warning: Incorrect tensor dimensions {tensor.shape}, reshaping")
-            return torch.zeros(1, 3, 128, 128).cuda()
+            return torch.zeros(1, 3, crop_size, crop_size).cuda()
             
         # Ensure we have 3 channels for RGB
         if tensor.shape[1] != 3:
@@ -156,7 +157,7 @@ class SafeOps:
             if tensor.shape[1] > 3:
                 tensor = tensor[:, :3, :, :]
             else:
-                return torch.zeros(1, 3, 128, 128).cuda()
+                return torch.zeros(1, 3, crop_size, crop_size).cuda()
         
         return tensor
     
