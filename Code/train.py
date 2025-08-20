@@ -13,7 +13,7 @@ import torch
 import torchvision.utils as vutils
 from torchvision.models import vgg16
 from perceptual import LossNetwork
-from ssim import MS_SSIM_Loss
+from ssim import MS_SSIM_Loss, SSIM_Loss
 from datasets2 import  TrainDatasetFromFolder4,TrainDatasetFromFolder2,TestDatasetFromFolder1
 
 from ECLoss import DCLoss
@@ -59,7 +59,7 @@ MEMORY_CONFIG = {
     'enable_cuda_benchmark': True,       # 啟用CUDA基準測試以提高性能
     'deterministic': False,             # 停用確定性訓練以提高速度
     'enable_cudnn_benchmark': True,      # 啟用cuDNN基準測試以提高性能
-    'batch_size': 4,                    # 減少批次大小 8→4 (因圖像尺寸增加到224)
+    'batch_size': 8,                    # 恢復批次大小 (因圖像尺寸恢復為128)
     'pin_memory': True,                 # 啟用固定記憶體以加速數據傳輸
 }
 
@@ -99,7 +99,7 @@ MODEL_CONFIG = {
 
 # --- DATA PROCESSING PARAMETERS ---
 DATA_CONFIG = {
-    'crop_size': 224,                   # 訓練用圖像裁剪大小 (增加到224以滿足MS-SSIM需求，至少需要161)
+    'crop_size': 128,                   # 訓練用圖像裁剪大小 (恢復為128以匹配數據集)
     'normalize_range': (-1, 1),         # 輸入標準化範圍
     'num_workers': 4,                   # 增加數據加載器的工作進程數
     'pin_memory': True,                 # 啟用固定記憶體以加速傳輸
@@ -266,7 +266,9 @@ for param in vgg_model.parameters():
 
 loss_network = LossNetwork(vgg_model).cuda()
 loss_network.eval()
-ms_ssim_module = MS_SSIM_Loss(data_range=1.0, size_average=True, channel=3).cuda()
+# 對於 128x128 圖像，使用 SSIM 替代 MS-SSIM
+ssim_module = SSIM_Loss(data_range=1.0, size_average=True, channel=3).cuda()
+# ms_ssim_module = MS_SSIM_Loss(data_range=1.0, size_average=True, channel=3).cuda()  # 保留用於大圖像
 
 
 optimizer_G= torch.optim.Adam(itertools.chain(netG_content.parameters() ,net_dehaze.parameters(),netG_haze.parameters(),net_G.parameters()), \
@@ -555,13 +557,13 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 loss_recover = torch.clamp(loss_recover, max=1000)
             # Similar checks for other large losses
 
-            # MS-SSIM 損失（基於0-1範圍，使用安全計算）
+            # SSIM 損失（基於0-1範圍，適用於 128x128 圖像）
             dehaze_B_01 = torch.clamp((dehaze_B + 1) / 2.0, 0.01, 0.99)  # 避免極值
             real_A_01   = torch.clamp((real_A   + 1) / 2.0, 0.01, 0.99)   # 避免極值
             
-            # 使用安全的 MS-SSIM 計算
-            msssim_loss = compute_loss_safely(ms_ssim_module, dehaze_B_01, real_A_01)
-            msssim_loss = 1.0 + msssim_loss  # 轉換為正損失
+            # 使用安全的 SSIM 計算（對小圖像更友好）
+            ssim_loss = compute_loss_safely(ssim_module, dehaze_B_01, real_A_01)
+            ssim_loss = 1.0 + ssim_loss  # 轉換為正損失
 
             # Total loss 組合
             loss_components.extend([
@@ -569,7 +571,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
                     LOSS_WEIGHTS['dc_loss'] * loss_DC_A,
                     LOSS_WEIGHTS['lab_loss'] * loss_Lab,
                     LOSS_WEIGHTS['tv_loss'] * tv_loss,
-                    LOSS_WEIGHTS['msssim_loss'] * msssim_loss
+                    LOSS_WEIGHTS['msssim_loss'] * ssim_loss
             ])
             # 註釋掉的損失函數組件:
             # LOSS_WEIGHTS['cap_loss'] * loss_CAP,   # CAP損失 - 保留為0以便日誌
@@ -765,10 +767,11 @@ for epoch in range(opt.epoch, opt.n_epochs):
                 this_psnr = 10.0 * torch.log10(torch.tensor(1.0, device=output_f.device) / (mse + 1e-10))
                 if torch.isfinite(this_psnr):
                     test_psnr += this_psnr.item()
-                    # 使用 MS-SSIM 作為驗證 SSIM（安全計算）
+                    # 使用 SSIM 作為驗證指標（適用於 128x128 圖像）
                     try:
-                        ms_ssim_metric = MS_SSIM(data_range=1.0, size_average=True, channel=3).cuda()
-                        ssim_value = ms_ssim_metric(hr_patch_f, output_f)
+                        from pytorch_msssim import SSIM
+                        ssim_metric = SSIM(data_range=1.0, size_average=True, channel=3).cuda()
+                        ssim_value = ssim_metric(hr_patch_f, output_f)
                         if torch.isfinite(ssim_value):
                             test_ssim += ssim_value.item()
                         else:
